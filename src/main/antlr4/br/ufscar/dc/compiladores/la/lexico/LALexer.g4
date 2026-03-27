@@ -1,57 +1,85 @@
 lexer grammar LALexer;
 
-// ---------------------------------------------------------
-// Palavras-chave reservadas da linguagem LA
-// Declaradas no topo para precedência sobre os Identificadores
-// ---------------------------------------------------------
-PALAVRA_CHAVE_ALGORITMO     : 'algoritmo';
-PALAVRA_CHAVE_DECLARE       : 'declare';
-PALAVRA_CHAVE_INTEIRO       : 'inteiro';
-PALAVRA_CHAVE_LITERAL       : 'literal';
-PALAVRA_CHAVE_LEIA          : 'leia';
-PALAVRA_CHAVE_ESCREVA       : 'escreva';
-PALAVRA_CHAVE_FIM_ALGORITMO : 'fim_algoritmo';
+// Palavras-chave reservadas - declaradas antes de IDENT para garantir precedencia
+PALAVRA_CHAVE_ALGORITMO        : 'algoritmo';
+PALAVRA_CHAVE_FIM_ALGORITMO    : 'fim_algoritmo';
+PALAVRA_CHAVE_DECLARE          : 'declare';
+PALAVRA_CHAVE_INTEIRO          : 'inteiro';
+PALAVRA_CHAVE_REAL             : 'real';
+PALAVRA_CHAVE_LOGICO           : 'logico';
+PALAVRA_CHAVE_LITERAL          : 'literal';
+PALAVRA_CHAVE_LEIA             : 'leia';
+PALAVRA_CHAVE_ESCREVA          : 'escreva';
+PALAVRA_CHAVE_SE               : 'se';
+PALAVRA_CHAVE_ENTAO            : 'entao';
+PALAVRA_CHAVE_SENAO            : 'senao';
+PALAVRA_CHAVE_FIM_SE           : 'fim_se';
+PALAVRA_CHAVE_ENQUANTO         : 'enquanto';
+PALAVRA_CHAVE_FACA             : 'faca';
+PALAVRA_CHAVE_FIM_ENQUANTO     : 'fim_enquanto';
+PALAVRA_CHAVE_PARA             : 'para';
+PALAVRA_CHAVE_ATE              : 'ate';
+PALAVRA_CHAVE_FIM_PARA         : 'fim_para';
+PALAVRA_CHAVE_RETORNE          : 'retorne';
+PALAVRA_CHAVE_E                : 'e';
+PALAVRA_CHAVE_OU               : 'ou';
+PALAVRA_CHAVE_NAO              : 'nao';
+PALAVRA_CHAVE_VERDADEIRO       : 'verdadeiro';
+PALAVRA_CHAVE_FALSO            : 'falso';
+PALAVRA_CHAVE_TIPO             : 'tipo';
+PALAVRA_CHAVE_REGISTRO         : 'registro';
+PALAVRA_CHAVE_FIM_REGISTRO     : 'fim_registro';
+PALAVRA_CHAVE_PROCEDIMENTO     : 'procedimento';
+PALAVRA_CHAVE_FIM_PROCEDIMENTO : 'fim_procedimento';
+PALAVRA_CHAVE_FUNCAO           : 'funcao';
+PALAVRA_CHAVE_FIM_FUNCAO       : 'fim_funcao';
+PALAVRA_CHAVE_VAR              : 'var';
+PALAVRA_CHAVE_CONSTANTE        : 'constante';
+PALAVRA_CHAVE_CASO             : 'caso';
+PALAVRA_CHAVE_SEJA             : 'seja';
+PALAVRA_CHAVE_FIM_CASO         : 'fim_caso';
+PONTEIROS                      : '..';
 
-// ---------------------------------------------------------
-// Símbolos especiais e pontuação
-// ---------------------------------------------------------
+// Operadores aritmeticos e de atribuicao
+ATRIBUICAO : '<-';
+MAIS       : '+';
+MENOS      : '-';
+VEZES      : '*';
+DIVIDIDO   : '/';
+MODULO     : '%';
+
+// Operadores relacionais - os compostos antes dos simples
+MENOR_IGUAL : '<=';
+MAIOR_IGUAL : '>=';
+DIFERENTE   : '<>';
+MENOR       : '<';
+MAIOR       : '>';
+IGUAL       : '=';
+
+// Simbolos especiais e pontuacao
 DOIS_PONTOS : ':';
+PONTO       : '.';
 ABRE_PAR    : '(';
 FECHA_PAR   : ')';
+ABRE_COL    : '[';
+FECHA_COL   : ']';
 VIRGULA     : ',';
+CIRCUNFLEXO : '^';
+AMPERSAND   : '&';
 
-// ---------------------------------------------------------
-// Tipos complexos
-// ---------------------------------------------------------
+// Literais numericos - NUM_REAL antes de NUM_INT para ter precedencia
+NUM_REAL : [0-9]+ '.' [0-9]+ ;
+NUM_INT  : [0-9]+ ;
 
-// Identificadores: obrigatoriamente iniciam com letra, podendo conter números e sublinhado
-IDENT : [a-zA-Z][a-zA-Z0-9_]* ;
+// Identificadores e cadeias
+IDENT  : [a-zA-Z][a-zA-Z0-9_]* ;
+CADEIA : '"' ~["\r\n]* '"' ;
 
-// Cadeia literal: sequência de caracteres delimitada por aspas duplas
-CADEIA : '"' ~'"'* '"' ;
+// Descarte
+WS         : [ \t\r\n]+ -> skip ;
+COMENTARIO      : '{' ~[}\r\n]* '}' -> skip ;
 
-
-// ---------------------------------------------------------
-// Descarte (Tokens ignorados na análise sintática)
-// ---------------------------------------------------------
-
-// Espaços em branco, tabulações e quebras de linha
-WS : [ \t\r\n]+ -> skip ;
-
-// Comentários de bloco delimitados por chaves
-COMENTARIO : '{' ~'}'* '}' -> skip ;
-
-
-// ---------------------------------------------------------
-// Captura de Erros Léxicos
-// Regras de *fallback* posicionadas no final da gramática
-// ---------------------------------------------------------
-
-// Captura aspas abertas que atingem uma quebra de linha sem fechar
-ERRO_CADEIA : '"' ~['"\r\n]* ;
-
-// Captura chaves abertas que atingem o fim do arquivo (EOF) sem fechar
-ERRO_COMENTARIO : '{' ~'}'* EOF ;
-
-// Captura qualquer caractere inválido que não casou com as regras anteriores
-ERRO_SIMBOLO : . ;
+// Erros lexicos
+ERRO_CADEIA     : '"' ~["\r\n]* ;
+ERRO_COMENTARIO : '{' ~[}\r\n]* ;
+ERRO_SIMBOLO    : . ;

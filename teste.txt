@@ -1,0 +1,5 @@
+algoritmo
+    declare
+        nome~ literal
+    declare
+        idade: inteiro

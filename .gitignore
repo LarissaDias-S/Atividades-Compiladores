@@ -1,0 +1,15 @@
+# Ignora as pastas de teste visual da extensão do VS Code
+.antlr/
+
+# Ignora a pasta onde o Maven vai jogar os arquivos compilados e o .jar
+target/
+
+# Ignora configurações locais do VS Code e Eclipse
+.vscode/
+.settings/
+.classpath
+.project
+
+# Ignora arquivos compilados soltos
+*.class
+*.jar

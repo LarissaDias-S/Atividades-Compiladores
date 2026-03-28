@@ -7,11 +7,10 @@ Este repositório contém a implementação do Trabalho 1 da disciplina de **Con
 * **Julia Pedro Silva** - RA: 820869
 * **Larissa Dias da Silva** - RA: 800204
 
-## Tecnologias e Versões
-Para garantir a compilação e execução correta, certifique-se de utilizar:
-* **Java:** Versão 17 ou superior.
-* **Maven:** Versão 3.8 ou superior.
-* **ANTLR:** Versão 4.13.1 (gerenciado automaticamente via Maven).
+## Pré-requisitos
+Para compilar e rodar este projeto, você precisará de:
+* **Java JDK 17** ou superior.
+* **Apache Maven 3.9.x** ou superior.
 
 ## Como Compilar
 O projeto utiliza o Apache Maven para automação do build. Para gerar o compilador, execute o comando abaixo na raiz do projeto:

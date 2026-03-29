@@ -1,4 +1,1 @@
-<'algoritmo','algoritmo'>
-<'declare','declare'>
-<'nome',IDENT>
-Linha 3: ~ - simbolo nao identificado
+Linha 1: cadeia literal nao fechada

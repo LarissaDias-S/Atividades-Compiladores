@@ -7,12 +7,14 @@ import java.io.IOException;
 import java.io.PrintWriter;
 
 /**
- * Classe principal do Analisador Léxico para a linguagem LA.
- * Responsável por gerenciar a entrada/saída e coordenar o processo de tokenização.
+ * Classe Principal do Analisador Léxico.
+ * Finalidade: Atuar como ponto de entrada do compilador, realizando o processamento
+ * de arquivos e a formatação da saída conforme os requisitos da Linguagem LA.
  */
 public class Principal {
     public static void main(String[] args) {
-        // Verificação de segurança: o programa exige caminho de entrada e de saída
+        // Validação dos argumentos de linha de comando:
+        // O programa necessita de dois caminhos (entrada e saída) para operar.
         if (args.length < 2) {
             System.out.println("Uso: java -jar meu-compilador.jar <arquivo_entrada> <arquivo_saida>");
             return;
@@ -21,23 +23,30 @@ public class Principal {
         String arquivoEntrada = args[0];
         String arquivoSaida = args[1];
 
-        // O bloco try-with-resources garante que o arquivo de saída será fechado automaticamente
+        // Uso de try-with-resources para garantir o fechamento seguro do stream de saída.
+        // Isso previne vazamento de memória e arquivos corrompidos.
         try (PrintWriter pw = new PrintWriter(arquivoSaida)) {
-            // Cria o fluxo de caracteres a partir do arquivo de entrada
+            
+            // Leitura do arquivo fonte utilizando CharStreams (API do ANTLR4).
             CharStream cs = CharStreams.fromFileName(arquivoEntrada);
             
-            // Instancia o Lexer gerado pelo ANTLR4
+            // Instanciação do Lexer gerado a partir da gramática LALexer.g4.
             LALexer lexer = new LALexer(cs);
             Token t = null;
 
-            // Loop principal: percorre o arquivo fonte token por token até o fim 
+            // Loop de processamento de tokens:
+            // O analisador percorre o fluxo até encontrar o token de fim de arquivo.
             while ((t = lexer.nextToken()).getType() != Token.EOF) {
-                // Obtém o nome simbólico definido na gramática .g4 
+                
+                // Recupera o nome simbólico do token (ex: IDENT, CADEIA) definido no .g4
                 String nomeToken = LALexer.VOCABULARY.getSymbolicName(t.getType());
                 String textoToken = t.getText();
 
-                // TRATAMENTO DE ERROS LÉXICOS
-                // Se encontrar um erro, reporta a linha e o erro específico e interrompe a execução 
+                /* * TRATAMENTO DE ERROS LÉXICOS
+                 * A especificação exige mensagens customizadas para símbolos inválidos, 
+                 * cadeias não fechadas e comentários não finalizados.
+                 * Caso um erro seja encontrado, o processo de análise léxica deve ser interrompido.
+                 */
                 if (nomeToken.equals("ERRO_SIMBOLO")) {
                     pw.println("Linha " + t.getLine() + ": " + textoToken + " - simbolo nao identificado");
                     break; 
@@ -49,20 +58,22 @@ public class Principal {
                     break;
                 }
 
-                // FORMATAÇÃO DA SAÍDA
-                // Tokens especiais (identificadores, cadeias e números) mostram o nome do grupo
+                /* * FORMATAÇÃO DA SAÍDA DE TOKENS VÁLIDOS
+                 * O formato de saída deve seguir o padrão: <'lexema',TIPO_TOKEN>
+                 * Diferenciamos tokens de identificação genérica de tokens de texto fixo.
+                 */
                 if (nomeToken.equals("IDENT") || nomeToken.equals("CADEIA") || 
                     nomeToken.equals("NUM_INT") || nomeToken.equals("NUM_REAL")) {
                     pw.println("<'" + textoToken + "'," + nomeToken + ">");
                 } 
-                // Palavras-chave e símbolos fixos mostram o próprio texto duas vezes
                 else {
+                    // Para palavras-chave e operadores fixos, o tipo do token é o próprio texto.
                     pw.println("<'" + textoToken + "','" + textoToken + "'>");
                 }
             }
         } catch (IOException ex) {
-            // Tratamento de erro caso o arquivo de entrada não seja encontrado ou falhe
-            System.err.println("Erro de I/O: " + ex.getMessage());
+            // Tratamento de falhas críticas de acesso ao disco ou arquivos inexistentes.
+            System.err.println("Erro crítico de I/O: " + ex.getMessage());
         }
     }
 }

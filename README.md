@@ -28,6 +28,10 @@ Para rodar o analisador léxico e processar um arquivo de código LA, utilize o 
 ```bash
 java -jar target/meu-compilador-1.0-SNAPSHOT-jar-with-dependencies.jar <arquivo_entrada> <arquivo_saida>
 ```
+Nota: Substitua <arquivo_entrada> pelo caminho do arquivo que você deseja analisar e <arquivo_saida> pelo nome do arquivo onde o resultado será salvo.
+
+Exemplo real:
+java -jar target/meu-compilador-1.0-SNAPSHOT-jar-with-dependencies.jar teste.txt saida.txt
 
 ## Casos de Teste Validados
 O grupo validou o analisador utilizando a suíte de testes oficiais da disciplina, garantindo o tratamento correto de:

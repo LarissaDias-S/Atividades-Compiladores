@@ -69,7 +69,7 @@ AMPERSAND   : '&';
 
 // Literais numericos - NUM_REAL antes de NUM_INT para ter precedencia
 NUM_REAL : [0-9]+ '.' [0-9]+ ;
-NUM_INT  : [0-9]+ ;
+NUM_INT : [0-9]+ ;
 
 // Identificadores e cadeias
 IDENT  : [a-zA-Z][a-zA-Z0-9_]* ;

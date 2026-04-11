@@ -1,1 +1,3 @@
-"cadeia sem fim
+algoritmo
+    declare nome int
+fim_algoritmo

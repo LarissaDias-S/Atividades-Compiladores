@@ -43,7 +43,7 @@ Exemplo de Uso:
 java -jar target/meu-compilador-1.0-SNAPSHOT-jar-with-dependencies.jar teste.txt saida.txt
 
 ## Tratamento de Erros e saídas (T1 e T2)
-O compilador foi validado com os caos de testes oficiais (62 casos no T2), garantindo o formato de saída exigido:
+O compilador foi validado com os casos de testes oficiais (62 casos no T2), garantindo o formato de saída exigido:
 
 1. Erros Léxicos (T1): Reporta a linha e o tipo do erro (ex: Linha X: cadeia literal não fechada).
 

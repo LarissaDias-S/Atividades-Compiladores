@@ -1,79 +1,119 @@
 package br.ufscar.dc.compiladores.la.lexico;
 
-import org.antlr.v4.runtime.CharStream;
-import org.antlr.v4.runtime.CharStreams;
-import org.antlr.v4.runtime.Token;
+import org.antlr.v4.runtime.*;
+
 import java.io.IOException;
 import java.io.PrintWriter;
 
 /**
- * Classe Principal do Analisador Léxico.
- * Finalidade: Atuar como ponto de entrada do compilador, realizando o processamento
- * de arquivos e a formatação da saída conforme os requisitos da Linguagem LA.
+ * Classe Principal do Compilador da Linguagem LA — T2 (Análise Léxica + Sintática).
+ *
+ * Finalidade: Ponto de entrada do compilador. Coordena o pipeline completo:
+ *   1. Leitura do arquivo fonte.
+ *   2. Análise Léxica (LALexer) — detecta e reporta erros léxicos.
+ *   3. Análise Sintática (LAParser) — detecta e reporta o primeiro erro sintático.
+ *   4. Garante que o arquivo de saída SEMPRE termine com "Fim da compilacao".
+ *
+ * Fluxo de controle de erros:
+ *   - Erros léxicos (ERRO_SIMBOLO, ERRO_CADEIA, ERRO_COMENTARIO) são detectados
+ *     via pré-varredura dos tokens antes de entregá-los ao Parser.
+ *     Ao encontrar um erro léxico, ele é impresso e a análise para.
+ *   - Erros sintáticos são detectados pelo CustomErrorListener acoplado ao Parser.
+ *   - Em ambos os casos, o fluxo encerra imediatamente após o primeiro erro,
+ *     garantindo a mensagem "Fim da compilacao" no final.
  */
 public class Principal {
+
     public static void main(String[] args) {
-        // Validação dos argumentos de linha de comando:
-        // O programa necessita de dois caminhos (entrada e saída) para operar.
+        // Validação dos argumentos: o compilador precisa de entrada e saída
         if (args.length < 2) {
             System.out.println("Uso: java -jar meu-compilador.jar <arquivo_entrada> <arquivo_saida>");
             return;
         }
 
         String arquivoEntrada = args[0];
-        String arquivoSaida = args[1];
+        String arquivoSaida   = args[1];
 
-        // Uso de try-with-resources para garantir o fechamento seguro do stream de saída.
-        // Isso previne vazamento de memória e arquivos corrompidos.
+        // try-with-resources garante que o PrintWriter sempre seja fechado,
+        // o que por sua vez garante o flush do "Fim da compilacao" no disco.
         try (PrintWriter pw = new PrintWriter(arquivoSaida)) {
-            
-            // Leitura do arquivo fonte utilizando CharStreams (API do ANTLR4).
+
+            // ----------------------------------------------------------------
+            // ETAPA 1: Leitura do arquivo fonte
+            // ----------------------------------------------------------------
             CharStream cs = CharStreams.fromFileName(arquivoEntrada);
-            
-            // Instanciação do Lexer gerado a partir da gramática LALexer.g4.
+
+            // ----------------------------------------------------------------
+            // ETAPA 2: Instancia o Lexer e cria nosso listener de erros
+            // ----------------------------------------------------------------
             LALexer lexer = new LALexer(cs);
-            Token t = null;
+            CustomErrorListener errorListener = new CustomErrorListener(pw);
 
-            // Loop de processamento de tokens:
-            // O analisador percorre o fluxo até encontrar o token de fim de arquivo.
+            // ----------------------------------------------------------------
+            // ETAPA 3: Pré-varredura léxica para detectar erros ANTES do Parser
+            //
+            // O ANTLR, por padrão, deixa o Parser consumir os tokens de erro
+            // léxico como se fossem tokens comuns. Para interromper no primeiro
+            // erro léxico, fazemos uma varredura antecipada dos tokens e os
+            // colocamos em uma lista. Se acharmos um erro léxico, imprimimos,
+            // encerramos a análise e pulamos direto para o "Fim da compilacao".
+            // ----------------------------------------------------------------
+            java.util.List<Token> todosOsTokens = new java.util.ArrayList<>();
+            Token t;
+            boolean erroLexico = false;
+
             while ((t = lexer.nextToken()).getType() != Token.EOF) {
-                
-                // Recupera o nome simbólico do token (ex: IDENT, CADEIA) definido no .g4
                 String nomeToken = LALexer.VOCABULARY.getSymbolicName(t.getType());
-                String textoToken = t.getText();
 
-                /* * TRATAMENTO DE ERROS LÉXICOS
-                 * A especificação exige mensagens customizadas para símbolos inválidos, 
-                 * cadeias não fechadas e comentários não finalizados.
-                 * Caso um erro seja encontrado, o processo de análise léxica deve ser interrompido.
-                 */
-                if (nomeToken.equals("ERRO_SIMBOLO")) {
-                    pw.println("Linha " + t.getLine() + ": " + textoToken + " - simbolo nao identificado");
-                    break; 
-                } else if (nomeToken.equals("ERRO_CADEIA")) {
+                if ("ERRO_SIMBOLO".equals(nomeToken)) {
+                    pw.println("Linha " + t.getLine() + ": " + t.getText() + " - simbolo nao identificado");
+                    erroLexico = true;
+                    break;
+                } else if ("ERRO_CADEIA".equals(nomeToken)) {
                     pw.println("Linha " + t.getLine() + ": cadeia literal nao fechada");
+                    erroLexico = true;
                     break;
-                } else if (nomeToken.equals("ERRO_COMENTARIO")) {
+                } else if ("ERRO_COMENTARIO".equals(nomeToken)) {
                     pw.println("Linha " + t.getLine() + ": comentario nao fechado");
+                    erroLexico = true;
                     break;
                 }
 
-                /* * FORMATAÇÃO DA SAÍDA DE TOKENS VÁLIDOS
-                 * O formato de saída deve seguir o padrão: <'lexema',TIPO_TOKEN>
-                 * Diferenciamos tokens de identificação genérica de tokens de texto fixo.
-                 */
-                if (nomeToken.equals("IDENT") || nomeToken.equals("CADEIA") || 
-                    nomeToken.equals("NUM_INT") || nomeToken.equals("NUM_REAL")) {
-                    pw.println("<'" + textoToken + "'," + nomeToken + ">");
-                } 
-                else {
-                    // Para palavras-chave e operadores fixos, o tipo do token é o próprio texto.
-                    pw.println("<'" + textoToken + "','" + textoToken + "'>");
-                }
+                todosOsTokens.add(t);
             }
+
+            // Se encontrou erro léxico, encerra aqui (abaixo imprime "Fim da compilacao")
+            if (!erroLexico) {
+                // Adiciona o token EOF ao final da lista para o Parser funcionar corretamente
+                todosOsTokens.add(t); // 't' é o EOF neste ponto
+
+                // ----------------------------------------------------------------
+                // ETAPA 4: Monta o CommonTokenStream a partir da lista de tokens
+                //          e instancia o Parser
+                // ----------------------------------------------------------------
+                ListTokenSource tokenSource = new ListTokenSource(todosOsTokens);
+                CommonTokenStream tokens = new CommonTokenStream(tokenSource);
+
+                LAParser parser = new LAParser(tokens);
+
+                // Remove todos os listeners padrão do ANTLR (que imprimem no stderr)
+                // e adiciona exclusivamente o nosso listener customizado
+                parser.removeErrorListeners();
+                parser.addErrorListener(errorListener);
+
+                // ----------------------------------------------------------------
+                // ETAPA 5: Dispara a análise sintática a partir da regra inicial
+                // ----------------------------------------------------------------
+                parser.programa();
+            }
+
+            // ----------------------------------------------------------------
+            // ETAPA 6: Mensagem obrigatória de encerramento — SEMPRE impressa
+            // ----------------------------------------------------------------
+            pw.println("Fim da compilacao");
+
         } catch (IOException ex) {
-            // Tratamento de falhas críticas de acesso ao disco ou arquivos inexistentes.
-            System.err.println("Erro crítico de I/O: " + ex.getMessage());
+            System.err.println("Erro critico de I/O: " + ex.getMessage());
         }
     }
 }

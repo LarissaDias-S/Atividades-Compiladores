@@ -1,5 +1,2 @@
-<'algoritmo','algoritmo'>
-<'declare','declare'>
-<'nome',IDENT>
-<'int',IDENT>
-<'fim_algoritmo','fim_algoritmo'>
+Linha 16: erro sintatico proximo a escreva
+Fim da compilacao

@@ -8,21 +8,29 @@ import org.antlr.v4.runtime.Token;
 import java.io.PrintWriter;
 
 /**
- * Ouvinte de Erros Customizado para o compilador da Linguagem LA.
- *
- * Intercepta erros sintáticos reportados pelo ANTLR4 e os formata conforme
- * a especificação: "Linha X: erro sintatico proximo a [lexema]"
- * Caso o erro ocorra no fim do arquivo, o lexema é impresso como "EOF".
+ * CustomErrorListener provê um mecanismo personalizado de tratamento de erros sintáticos.
+ * * Esta classe estende o BaseErrorListener do ANTLR4 para interceptar eventos de erro
+ * e formatar a saída de acordo com os requisitos específicos da Linguagem LA:
+ * "Linha X: erro sintatico proximo a [lexema]".
  */
 public class CustomErrorListener extends BaseErrorListener {
 
     private final PrintWriter saida;
     private boolean erroEncontrado = false;
 
+    /**
+     * Construtor que recebe o PrintWriter para escrita no arquivo de saída.
+     * * @param saida O fluxo de saída onde as mensagens de erro serão gravadas.
+     */
     public CustomErrorListener(PrintWriter saida) {
         this.saida = saida;
     }
 
+    /**
+     * Método invocado automaticamente pelo ANTLR quando um erro sintático é detectado.
+     * * Implementa a lógica de interrupção no primeiro erro, ignorando tentativas de 
+     * recuperação subsequentes para manter a precisão do reporte exigido.
+     */
     @Override
     public void syntaxError(
             Recognizer<?, ?> recognizer,
@@ -32,14 +40,19 @@ public class CustomErrorListener extends BaseErrorListener {
             String msg,
             RecognitionException e) {
 
-        // Só reporta o primeiro erro; ignora os demais (tentativas de recuperação do ANTLR)
+        /* * Lógica de interrupção: O ANTLR tenta se recuperar de erros sintáticos 
+         * por padrão. Para a especificação do Trabalho 2, reportamos apenas a 
+         * primeira ocorrência.
+         */
         if (erroEncontrado) {
             return;
         }
         erroEncontrado = true;
 
-        // Cast para Token para extrair apenas o texto do lexema,
-        // evitando o toString() que imprime a representação interna do objeto.
+        /*
+         * Extração do lexema causador do erro. Caso o símbolo seja nulo ou
+         * represente o fim do arquivo (<EOF>), o texto é normalizado para "EOF".
+         */
         String lexema = "EOF";
         if (offendingSymbol instanceof Token) {
             String texto = ((Token) offendingSymbol).getText();
@@ -51,10 +64,18 @@ public class CustomErrorListener extends BaseErrorListener {
         saida.println("Linha " + line + ": erro sintatico proximo a " + lexema);
     }
 
+    /**
+     * Verifica se algum erro foi detectado durante a análise.
+     * * @return true se um erro sintático foi reportado, false caso contrário.
+     */
     public boolean isErroEncontrado() {
         return erroEncontrado;
     }
 
+    /**
+     * Força o estado de erro encontrado.
+     * Útil para sincronizar estados entre analisadores léxicos e sintáticos.
+     */
     public void setErroEncontrado() {
         this.erroEncontrado = true;
     }

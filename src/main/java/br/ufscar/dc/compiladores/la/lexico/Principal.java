@@ -6,7 +6,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 
 /**
- * Classe Principal do Compilador da Linguagem LA — T2 (Análise Léxica + Sintática).
+ * Classe Principal do Compilador da Linguagem LA — T2.
  *
  * Finalidade: Ponto de entrada do compilador. Coordena o pipeline completo:
  *   1. Leitura do arquivo fonte.
@@ -38,26 +38,19 @@ public class Principal {
         // o que por sua vez garante o flush do "Fim da compilacao" no disco.
         try (PrintWriter pw = new PrintWriter(arquivoSaida)) {
 
-            // ----------------------------------------------------------------
             // ETAPA 1: Leitura do arquivo fonte
-            // ----------------------------------------------------------------
             CharStream cs = CharStreams.fromFileName(arquivoEntrada);
 
-            // ----------------------------------------------------------------
             // ETAPA 2: Instancia o Lexer e cria nosso listener de erros
-            // ----------------------------------------------------------------
             LALexer lexer = new LALexer(cs);
             CustomErrorListener errorListener = new CustomErrorListener(pw);
 
-            // ----------------------------------------------------------------
             // ETAPA 3: Pré-varredura léxica para detectar erros ANTES do Parser
-            //
             // O ANTLR, por padrão, deixa o Parser consumir os tokens de erro
             // léxico como se fossem tokens comuns. Para interromper no primeiro
             // erro léxico, fazemos uma varredura antecipada dos tokens e os
             // colocamos em uma lista. Se acharmos um erro léxico, imprimimos,
             // encerramos a análise e pulamos direto para o "Fim da compilacao".
-            // ----------------------------------------------------------------
             java.util.List<Token> todosOsTokens = new java.util.ArrayList<>();
             Token t;
             boolean erroLexico = false;
@@ -87,29 +80,21 @@ public class Principal {
                 // Adiciona o token EOF ao final da lista para o Parser funcionar corretamente
                 todosOsTokens.add(t); // 't' é o EOF neste ponto
 
-                // ----------------------------------------------------------------
-                // ETAPA 4: Monta o CommonTokenStream a partir da lista de tokens
-                //          e instancia o Parser
-                // ----------------------------------------------------------------
+                // ETAPA 4: Monta o CommonTokenStream a partir da lista de tokens e instancia o Parser
                 ListTokenSource tokenSource = new ListTokenSource(todosOsTokens);
                 CommonTokenStream tokens = new CommonTokenStream(tokenSource);
 
                 LAParser parser = new LAParser(tokens);
 
-                // Remove todos os listeners padrão do ANTLR (que imprimem no stderr)
-                // e adiciona exclusivamente o nosso listener customizado
+                // Remove todos os listeners padrão do ANTLR e adiciona exclusivamente o nosso listener customizado
                 parser.removeErrorListeners();
                 parser.addErrorListener(errorListener);
 
-                // ----------------------------------------------------------------
                 // ETAPA 5: Dispara a análise sintática a partir da regra inicial
-                // ----------------------------------------------------------------
                 parser.programa();
             }
 
-            // ----------------------------------------------------------------
-            // ETAPA 6: Mensagem obrigatória de encerramento — SEMPRE impressa
-            // ----------------------------------------------------------------
+            // ETAPA 6: Mensagem obrigatória de encerramento 
             pw.println("Fim da compilacao");
 
         } catch (IOException ex) {

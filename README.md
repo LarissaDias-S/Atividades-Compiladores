@@ -1,11 +1,20 @@
-# Trabalho 1: Analisador Léxico (Linguagem Algorítmica - LA)
+# Projeto: Compilador da Linguagem Algorítmica (LA)
 
-Este repositório contém a implementação do Trabalho 1 da disciplina de **Construção de Compiladores** (DC/UFSCar), ministrada pelo Prof. Daniel Lucrédio.
+Este repositório contém o desenvolvimento do compilador para a linguagem LA, realizado para a disciplina de **Construção de Compiladores** (DC/UFSCar), ministrada pelo Prof. Daniel Lucrédio.
 
 ## Integrantes do Grupo
 * **Bruna Matias de Lima** - RA: 820582
 * **Julia Pedro Silva** - RA: 820869
 * **Larissa Dias da Silva** - RA: 800204
+
+
+## Fases do Projeto
+
+### Trabalho 1: Analisador Léxico (Concluído ✅)
+Implementação responsável pela leitura do programa-fonte e produção da lista de tokens identificados. Trata erros de símbolos não identificados, cadeias literais e comentários não fechados.
+
+### Trabalho 2: Analisador Sintático (Concluído ✅)
+Expansão do projeto para realizar a análise gramatical utilizando ANTLR4. O compilador agora detecta erros estruturais e interrompe a execução no primeiro erro encontrado, seguindo rigorosamente a especificação de saída.
 
 ## Pré-requisitos
 Para compilar e rodar este projeto, você precisará de:
@@ -19,7 +28,7 @@ O projeto utiliza o Apache Maven para automação do build. Para gerar o compila
 mvn clean package
 ```
 
-Isso gerará a pasta `target/` contendo o arquivo executável `.jar` com todas as dependências incluídas.
+Isso gerará a pasta `target/` contendo o arquivo executável `meu-compilador-1.0-SNAPSHOT-jar-with-dependencies.jar` com todas as dependências incluídas.
 
 
 ## Como Executar
@@ -30,20 +39,14 @@ java -jar target/meu-compilador-1.0-SNAPSHOT-jar-with-dependencies.jar <arquivo_
 ```
 Nota: Substitua <arquivo_entrada> pelo caminho do arquivo que você deseja analisar e <arquivo_saida> pelo nome do arquivo onde o resultado será salvo.
 
-Exemplo real:
+Exemplo de Uso:
 java -jar target/meu-compilador-1.0-SNAPSHOT-jar-with-dependencies.jar teste.txt saida.txt
 
-## Casos de Teste Validados
-O grupo validou o analisador utilizando a suíte de testes oficiais da disciplina, garantindo o tratamento correto de:
+## Tratamento de Erros e saídas (T1 e T2)
+O compilador foi validado com os caos de testes oficiais (62 casos no T2), garantindo o formato de saída exigido:
 
-Tokens Válidos: Reconhecimento de palavras-chave, identificadores, números (inteiros e reais) e operadores.
+1. Erros Léxicos (T1): Reporta a linha e o tipo do erro (ex: Linha X: cadeia literal não fechada).
 
-Comentários não fechados: Identificados com a mensagem Linha X: comentario nao fechado.
+2. Erros Sintáticos (T2): Reporta o primeiro erro encontrado no formato Linha X: erro sintatico proximo a [lexema].
 
-Cadeias não fechadas: Identificadas com a mensagem Linha X: cadeia literal nao fechada.
-
-Símbolos não identificados: Identificados com a mensagem Linha X: <simbolo> - simbolo nao identificado.
-
-
-
-
+3. Encerramento: Todas as execuções, independentemente de erro, finalizam o arquivo de saída com a frase: 'Fim da compilacao'.

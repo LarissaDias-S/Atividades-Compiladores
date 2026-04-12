@@ -4,60 +4,64 @@ options {
     tokenVocab=LALexer;
 }
 
-// ---------------------------------------------------------
-// REGRAS SINTÁTICAS
-// ---------------------------------------------------------
+/**
+ * REGRAS SINTÁTICAS PRINCIPAIS
+ * Define a estrutura de alto nível de um programa na Linguagem Algorítmica (LA).
+ */
 
-// programa -> declaracoes "algoritmo" corpo "fim_algoritmo"
+/* Ponto de entrada: define a sequência obrigatória de um algoritmo válido */
 programa : declaracoes PALAVRA_CHAVE_ALGORITMO corpo PALAVRA_CHAVE_FIM_ALGORITMO EOF ;
 
-// declaracoes -> {decl_local_global}
+/* Agrupamento de definições locais e globais antes do corpo principal */
 declaracoes : decl_local_global* ;
 
-// decl_local_global -> declaracao_local | declaracao_global
 decl_local_global : declaracao_local 
                   | declaracao_global 
                   ;
 
-// declaracao_local -> "declare" variavel | "constante" IDENT ":" tipo_basico "=" valor_constante | "tipo" IDENT ":" tipo
+/* Escopo local: variáveis, constantes e definição de novos tipos */
 declaracao_local : PALAVRA_CHAVE_DECLARE variavel
                  | 'constante' IDENT DOIS_PONTOS tipo_basico '=' valor_constante
                  | 'tipo' IDENT DOIS_PONTOS tipo
                  ;
 
-// variavel -> identificador {"," identificador} ":" tipo
+/* Definição de variáveis com suporte a listas e tipos */
 variavel : identificador (VIRGULA identificador)* DOIS_PONTOS tipo ;
 
-// identificador -> IDENT {"." IDENT} dimensão
+/* Suporte a membros de registros (ponto) e arrays (dimensao) */
 identificador : IDENT ('.' IDENT)* dimensao ;
 
-// dimensao -> {"[" exp_aritmetica "]"}
 dimensao : ('[' exp_aritmetica ']')* ;
 
-// tipo -> registro | tipo_estendido
 tipo : registro 
      | tipo_estendido 
      ;
 
-// ---------------------------------------------------------
-// TIPOS E CONSTANTES
-// ---------------------------------------------------------
+/**
+ * TIPOS E CONSTANTES
+ * Regras para definição de domínios de dados e valores fixos.
+ */
+
 tipo_basico : 'literal' | 'inteiro' | 'real' | 'logico' ;
 
 tipo_basico_ident : tipo_basico | IDENT ;
 
+/* Suporte a ponteiros através do símbolo circunflexo */
 tipo_estendido : '^'? tipo_basico_ident ;
 
 valor_constante : CADEIA | NUM_INT | NUM_REAL | 'verdadeiro' | 'falso' ;
 
+/* Estrutura de dados composta */
 registro : 'registro' variavel* 'fim_registro' ;
 
+/**
+ * CORPO E COMANDOS
+ * Define o fluxo de execução e a lógica do algoritmo.
+ */
 
-// ---------------------------------------------------------
-// CORPO E COMANDOS
-// ---------------------------------------------------------
 corpo : declaracao_local* cmd* ;
 
+/* Conjunto de comandos aceitos pela linguagem */
 cmd : cmdLeia | cmdEscreva | cmdSe | cmdCaso | cmdPara | cmdEnquanto | cmdFaca | cmdAtribuicao | cmdChamada | cmdRetorne ;
 
 cmdLeia : 'leia' '(' '^'? identificador (VIRGULA '^'? identificador)* ')' ;
@@ -80,6 +84,7 @@ cmdChamada : IDENT '(' expressao (VIRGULA expressao)* ')' ;
 
 cmdRetorne : 'retorne' expressao ;
 
+/* Estruturas auxiliares para o comando 'caso' */
 selecao : item_selecao* ;
 
 item_selecao : constantes DOIS_PONTOS cmd* ;
@@ -88,10 +93,11 @@ constantes : numero_intervalo (VIRGULA numero_intervalo)* ;
 
 numero_intervalo : op_unario? NUM_INT ('..' op_unario? NUM_INT)? ;
 
+/**
+ * DECLARAÇÕES GLOBAIS
+ * Definição de sub-rotinas: procedimentos (sem retorno) e funções (com retorno).
+ */
 
-// ---------------------------------------------------------
-// DECLARAÇÕES GLOBAIS (Procedimentos e Funções)
-// ---------------------------------------------------------
 declaracao_global : 'procedimento' IDENT '(' parametros? ')' declaracao_local* cmd* 'fim_procedimento'
                   | 'funcao' IDENT '(' parametros? ')' DOIS_PONTOS tipo_estendido declaracao_local* cmd* 'fim_funcao'
                   ;
@@ -100,14 +106,18 @@ parametros : parametro (VIRGULA parametro)* ;
 
 parametro : 'var'? identificador (VIRGULA identificador)* DOIS_PONTOS tipo_estendido ;
 
-// ---------------------------------------------------------
-// EXPRESSÕES ARITMÉTICAS, RELACIONAIS E LÓGICAS
-// ---------------------------------------------------------
+/**
+ * EXPRESSÕES ARITMÉTICAS, RELACIONAIS E LÓGICAS
+ * Organizadas por níveis de precedência (aritmética > relacional > lógica).
+ */
 
+/* Nível 1: Soma e Subtração */
 exp_aritmetica : termo (op1 termo)* ;
 
+/* Nível 2: Multiplicação e Divisão */
 termo : fator (op2 fator)* ;
 
+/* Nível 3: Módulo */
 fator : parcela (op3 parcela)* ;
 
 op1 : '+' | '-' ;
@@ -116,6 +126,7 @@ op2 : '*' | '/' ;
 
 op3 : '%' ;
 
+/* Unidades básicas de uma expressão aritmética */
 parcela : op_unario? parcela_unario 
         | parcela_nao_unario 
         ;
@@ -131,10 +142,12 @@ parcela_nao_unario : '&' identificador
                    | CADEIA 
                    ;
 
+/* Comparações entre expressões aritméticas */
 exp_relacional : exp_aritmetica (op_relacional exp_aritmetica)? ;
 
 op_relacional : '=' | '<>' | '>=' | '<=' | '>' | '<' ;
 
+/* Lógica de primeira ordem: ou, e, nao */
 expressao : termo_logico (op_logico_1 termo_logico)* ;
 
 termo_logico : fator_logico (op_logico_2 fator_logico)* ;

@@ -1,2 +1,2 @@
-Linha 16: erro sintatico proximo a escreva
+Linha 5: tipo inteir nao declarado
 Fim da compilacao

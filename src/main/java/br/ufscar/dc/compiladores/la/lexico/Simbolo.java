@@ -1,5 +1,8 @@
 package br.ufscar.dc.compiladores.la.lexico;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Representa uma entrada na Tabela de Símbolos do analisador semântico.
  *
@@ -37,6 +40,11 @@ public class Simbolo {
     private final String nomeDoTipo;
 
     /**
+     * Lista de campos para símbolos que representam registros ou tipos customizados.
+     */
+    private final List<Simbolo> campos;
+
+    /**
      * Construtor para símbolos de tipo primitivo.
      */
     public Simbolo(String nome, Categoria categoria, TipoLA tipo) {
@@ -44,6 +52,7 @@ public class Simbolo {
         this.categoria  = categoria;
         this.tipo       = tipo;
         this.nomeDoTipo = null;
+        this.campos     = new ArrayList<>();
     }
 
     /**
@@ -54,18 +63,26 @@ public class Simbolo {
         this.categoria  = categoria;
         this.tipo       = tipo;
         this.nomeDoTipo = nomeDoTipo;
+        this.campos     = new ArrayList<>();
     }
 
     public String getNome()       { return nome; }
     public Categoria getCategoria() { return categoria; }
     public TipoLA getTipo()       { return tipo; }
     public String getNomeDoTipo() { return nomeDoTipo; }
+    
+    /**
+     * Métodos para manipulação dos campos do registro.
+     */
+    public List<Simbolo> getCampos() { return campos; }
+    public void adicionarCampo(Simbolo s) { this.campos.add(s); }
 
     @Override
     public String toString() {
         return "Simbolo{nome='" + nome + "', categoria=" + categoria
                 + ", tipo=" + tipo
                 + (nomeDoTipo != null ? ", nomeDoTipo='" + nomeDoTipo + "'" : "")
+                + (campos.isEmpty() ? "" : ", campos=" + campos.size())
                 + "}";
     }
 }

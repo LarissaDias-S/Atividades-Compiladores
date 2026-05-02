@@ -6,161 +6,143 @@ options {
 
 /**
  * REGRAS SINTÁTICAS PRINCIPAIS
- * Define a estrutura de alto nível de um programa na Linguagem Algorítmica (LA).
  */
 
-/* Ponto de entrada: define a sequência obrigatória de um algoritmo válido */
 programa : declaracoes PALAVRA_CHAVE_ALGORITMO corpo PALAVRA_CHAVE_FIM_ALGORITMO EOF ;
 
-/* Agrupamento de definições locais e globais antes do corpo principal */
 declaracoes : decl_local_global* ;
 
 decl_local_global : declaracao_local 
                   | declaracao_global 
                   ;
 
-/* Escopo local: variáveis, constantes e definição de novos tipos */
 declaracao_local : PALAVRA_CHAVE_DECLARE variavel
-                 | 'constante' IDENT DOIS_PONTOS tipo_basico '=' valor_constante
-                 | 'tipo' IDENT DOIS_PONTOS tipo
+                 | PALAVRA_CHAVE_CONSTANTE IDENT DOIS_PONTOS tipo_basico IGUAL valor_constante
+                 | PALAVRA_CHAVE_TIPO IDENT DOIS_PONTOS tipo
                  ;
 
-/* Definição de variáveis com suporte a listas e tipos */
 variavel : identificador (VIRGULA identificador)* DOIS_PONTOS tipo ;
 
-/* Suporte a membros de registros (ponto) e arrays (dimensao) */
-identificador : IDENT ('.' IDENT)* dimensao ;
+identificador : IDENT (PONTO IDENT)* dimensao ;
 
-dimensao : ('[' exp_aritmetica ']')* ;
+dimensao : (ABRE_COL exp_aritmetica FECHA_COL)* ;
 
-tipo : registro 
-     | tipo_estendido 
-     ;
+tipo : registro | tipo_estendido ;
 
 /**
  * TIPOS E CONSTANTES
- * Regras para definição de domínios de dados e valores fixos.
  */
 
-tipo_basico : 'literal' | 'inteiro' | 'real' | 'logico' ;
+tipo_basico : PALAVRA_CHAVE_LITERAL 
+            | PALAVRA_CHAVE_INTEIRO 
+            | PALAVRA_CHAVE_REAL 
+            | PALAVRA_CHAVE_LOGICO 
+            ;
 
 tipo_basico_ident : tipo_basico | IDENT ;
 
-/* Suporte a ponteiros através do símbolo circunflexo */
-tipo_estendido : '^'? tipo_basico_ident ;
+tipo_estendido : CIRCUNFLEXO? tipo_basico_ident ;
 
-valor_constante : CADEIA | NUM_INT | NUM_REAL | 'verdadeiro' | 'falso' ;
+valor_constante : CADEIA | NUM_INT | NUM_REAL | PALAVRA_CHAVE_VERDADEIRO | PALAVRA_CHAVE_FALSO ;
 
-/* Estrutura de dados composta */
-registro : 'registro' variavel* 'fim_registro' ;
+registro : PALAVRA_CHAVE_REGISTRO variavel* PALAVRA_CHAVE_FIM_REGISTRO ;
 
 /**
  * CORPO E COMANDOS
- * Define o fluxo de execução e a lógica do algoritmo.
  */
 
 corpo : declaracao_local* cmd* ;
 
-/* Conjunto de comandos aceitos pela linguagem */
 cmd : cmdLeia | cmdEscreva | cmdSe | cmdCaso | cmdPara | cmdEnquanto | cmdFaca | cmdAtribuicao | cmdChamada | cmdRetorne ;
 
-cmdLeia : 'leia' '(' '^'? identificador (VIRGULA '^'? identificador)* ')' ;
+cmdLeia : PALAVRA_CHAVE_LEIA ABRE_PAR CIRCUNFLEXO? identificador (VIRGULA CIRCUNFLEXO? identificador)* FECHA_PAR ;
 
-cmdEscreva : 'escreva' '(' expressao (VIRGULA expressao)* ')' ;
+cmdEscreva : PALAVRA_CHAVE_ESCREVA ABRE_PAR expressao (VIRGULA expressao)* FECHA_PAR ;
 
-cmdSe : 'se' expressao 'entao' cmd* ('senao' cmd*)? 'fim_se' ;
+cmdSe : PALAVRA_CHAVE_SE expressao PALAVRA_CHAVE_ENTAO cmd* (PALAVRA_CHAVE_SENAO cmd*)? PALAVRA_CHAVE_FIM_SE ;
 
-cmdCaso : 'caso' exp_aritmetica 'seja' selecao ('senao' cmd*)? 'fim_caso' ;
+cmdCaso : PALAVRA_CHAVE_CASO exp_aritmetica PALAVRA_CHAVE_SEJA selecao (PALAVRA_CHAVE_SENAO cmd*)? PALAVRA_CHAVE_FIM_CASO ;
 
-cmdPara : 'para' IDENT '<-' exp_aritmetica 'ate' exp_aritmetica 'faca' cmd* 'fim_para' ;
+cmdPara : PALAVRA_CHAVE_PARA IDENT ATRIBUICAO exp_aritmetica PALAVRA_CHAVE_ATE exp_aritmetica PALAVRA_CHAVE_FACA cmd* PALAVRA_CHAVE_FIM_PARA ;
 
-cmdEnquanto : 'enquanto' expressao 'faca' cmd* 'fim_enquanto' ;
+cmdEnquanto : PALAVRA_CHAVE_ENQUANTO expressao PALAVRA_CHAVE_FACA cmd* PALAVRA_CHAVE_FIM_ENQUANTO ;
 
-cmdFaca : 'faca' cmd* 'ate' expressao ;
+cmdFaca : PALAVRA_CHAVE_FACA cmd* PALAVRA_CHAVE_ATE expressao ;
 
-cmdAtribuicao : '^'? identificador '<-' expressao ;
+cmdAtribuicao : CIRCUNFLEXO? identificador ATRIBUICAO expressao ;
 
-cmdChamada : IDENT '(' expressao (VIRGULA expressao)* ')' ;
+cmdChamada : IDENT ABRE_PAR expressao (VIRGULA expressao)* FECHA_PAR ;
 
-cmdRetorne : 'retorne' expressao ;
+cmdRetorne : PALAVRA_CHAVE_RETORNE expressao ;
 
-/* Estruturas auxiliares para o comando 'caso' */
 selecao : item_selecao* ;
 
 item_selecao : constantes DOIS_PONTOS cmd* ;
 
 constantes : numero_intervalo (VIRGULA numero_intervalo)* ;
 
-numero_intervalo : op_unario? NUM_INT ('..' op_unario? NUM_INT)? ;
+numero_intervalo : op_unario? NUM_INT (PONTEIROS op_unario? NUM_INT)? ;
 
 /**
  * DECLARAÇÕES GLOBAIS
- * Definição de sub-rotinas: procedimentos (sem retorno) e funções (com retorno).
  */
 
-declaracao_global : 'procedimento' IDENT '(' parametros? ')' declaracao_local* cmd* 'fim_procedimento'
-                  | 'funcao' IDENT '(' parametros? ')' DOIS_PONTOS tipo_estendido declaracao_local* cmd* 'fim_funcao'
+declaracao_global : PALAVRA_CHAVE_PROCEDIMENTO IDENT ABRE_PAR parametros? FECHA_PAR declaracao_local* cmd* PALAVRA_CHAVE_FIM_PROCEDIMENTO
+                  | PALAVRA_CHAVE_FUNCAO IDENT ABRE_PAR parametros? FECHA_PAR DOIS_PONTOS tipo_estendido declaracao_local* cmd* PALAVRA_CHAVE_FIM_FUNCAO
                   ;
 
 parametros : parametro (VIRGULA parametro)* ;
 
-parametro : 'var'? identificador (VIRGULA identificador)* DOIS_PONTOS tipo_estendido ;
+parametro : PALAVRA_CHAVE_VAR? identificador (VIRGULA identificador)* DOIS_PONTOS tipo_estendido ;
 
 /**
- * EXPRESSÕES ARITMÉTICAS, RELACIONAIS E LÓGICAS
- * Organizadas por níveis de precedência (aritmética > relacional > lógica).
+ * EXPRESSÕES
  */
 
-/* Nível 1: Soma e Subtração */
 exp_aritmetica : termo (op1 termo)* ;
 
-/* Nível 2: Multiplicação e Divisão */
 termo : fator (op2 fator)* ;
 
-/* Nível 3: Módulo */
 fator : parcela (op3 parcela)* ;
 
-op1 : '+' | '-' ;
+op1 : MAIS | MENOS ;
 
-op2 : '*' | '/' ;
+op2 : VEZES | DIVIDIDO ;
 
-op3 : '%' ;
+op3 : MODULO ;
 
-/* Unidades básicas de uma expressão aritmética */
 parcela : op_unario? parcela_unario 
         | parcela_nao_unario 
         ;
 
-parcela_unario : '^'? identificador 
-               | IDENT '(' expressao (VIRGULA expressao)* ')' 
+parcela_unario : CIRCUNFLEXO? identificador 
+               | IDENT ABRE_PAR expressao (VIRGULA expressao)* FECHA_PAR 
                | NUM_INT 
                | NUM_REAL 
-               | '(' expressao ')' 
+               | ABRE_PAR expressao FECHA_PAR 
                ;
 
-parcela_nao_unario : '&' identificador 
+parcela_nao_unario : AMPERSAND identificador 
                    | CADEIA 
                    ;
 
-/* Comparações entre expressões aritméticas */
 exp_relacional : exp_aritmetica (op_relacional exp_aritmetica)? ;
 
-op_relacional : '=' | '<>' | '>=' | '<=' | '>' | '<' ;
+op_relacional : IGUAL | DIFERENTE | MAIOR_IGUAL | MENOR_IGUAL | MAIOR | MENOR ;
 
-/* Lógica de primeira ordem: ou, e, nao */
 expressao : termo_logico (op_logico_1 termo_logico)* ;
 
 termo_logico : fator_logico (op_logico_2 fator_logico)* ;
 
-fator_logico : 'nao'? parcela_logica ;
+fator_logico : PALAVRA_CHAVE_NAO? parcela_logica ;
 
-parcela_logica : 'verdadeiro' 
-               | 'falso' 
+parcela_logica : PALAVRA_CHAVE_VERDADEIRO 
+               | PALAVRA_CHAVE_FALSO 
                | exp_relacional 
                ;
 
-op_logico_1 : 'ou' ;
+op_logico_1 : PALAVRA_CHAVE_OU ;
 
-op_logico_2 : 'e' ;
+op_logico_2 : PALAVRA_CHAVE_E ;
 
-op_unario : '-' ;
+op_unario : MENOS ;

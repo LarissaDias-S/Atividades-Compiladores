@@ -103,6 +103,7 @@ public class Escopos {
             return (t1 == TipoLA.REAL || t2 == TipoLA.REAL) ? TipoLA.REAL : TipoLA.INTEIRO;
 
         if (t1 == TipoLA.LOGICO && t2 == TipoLA.LOGICO) return TipoLA.LOGICO;
+        if (t1 == TipoLA.LITERAL && t2 == TipoLA.LITERAL) return TipoLA.LITERAL;
 
         return TipoLA.INDEFINIDO;
     }

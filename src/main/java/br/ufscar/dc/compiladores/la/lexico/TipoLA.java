@@ -22,7 +22,7 @@ public enum TipoLA {
     /** Cadeias de caracteres entre aspas (ex: "olá") */
     LITERAL,
 
-    /** Referência de memória — variável declarada com '^' antes do tipo */
+    /** Referência de memória, variável declarada com '^' antes do tipo */
     PONTEIRO,
 
     /**

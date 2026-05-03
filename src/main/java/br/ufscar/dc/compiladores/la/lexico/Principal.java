@@ -86,7 +86,7 @@ public class Principal {
                 }
             }
 
-            // Mensagem obrigatória de encerramento — sempre impressa
+            // Mensagem obrigatória de encerramento, sempre impressa
             pw.println("Fim da compilacao");
 
         } catch (IOException ex) {

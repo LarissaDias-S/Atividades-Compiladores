@@ -157,27 +157,43 @@ public class Escopos {
     }
 
     /**
-     * Determina o tipo resultante de uma expressao binaria (ex: a + b).
+     * Determina o tipo resultante de uma operacao aritmetica ou de concatenacao
+     * entre parcelas (ex: a + b, s1 * s2).
      *
-     * Regras:
-     *   - INDEFINIDO em qualquer operando -> INDEFINIDO
-     *   - INTEIRO op INTEIRO -> INTEIRO
-     *   - qualquer numerico com REAL -> REAL
-     *   - LOGICO op LOGICO -> LOGICO
-     *   - LITERAL op LITERAL -> LITERAL
-     *   - qualquer outro cruzamento -> INDEFINIDO
+     * Regras do T4:
+     *   - INDEFINIDO em qualquer operando -> INDEFINIDO (sem novo erro aqui)
+     *   - INTEIRO com INTEIRO -> INTEIRO; qualquer REAL envolvido -> REAL
+     *   - LITERAL com LITERAL -> LITERAL
+     *   - LOGICO, PONTEIRO, ENDERECO, REGISTRO ou cruzamentos invalidos -> INDEFINIDO
+     *     (ex: literal + logico); o visitante reporta "tipo de expressao incompativel"
      */
     public static TipoLA tipoResultanteExpressao(TipoLA t1, TipoLA t2) {
-        if (t1 == TipoLA.INDEFINIDO || t2 == TipoLA.INDEFINIDO) return TipoLA.INDEFINIDO;
+        if (t1 == TipoLA.INDEFINIDO || t2 == TipoLA.INDEFINIDO) {
+            return TipoLA.INDEFINIDO;
+        }
 
         if ((t1 == TipoLA.INTEIRO || t1 == TipoLA.REAL)
          && (t2 == TipoLA.INTEIRO || t2 == TipoLA.REAL)) {
             return (t1 == TipoLA.REAL || t2 == TipoLA.REAL) ? TipoLA.REAL : TipoLA.INTEIRO;
         }
 
-        if (t1 == TipoLA.LOGICO  && t2 == TipoLA.LOGICO)  return TipoLA.LOGICO;
-        if (t1 == TipoLA.LITERAL && t2 == TipoLA.LITERAL) return TipoLA.LITERAL;
+        if (t1 == TipoLA.LITERAL && t2 == TipoLA.LITERAL) {
+            return TipoLA.LITERAL;
+        }
 
+        return TipoLA.INDEFINIDO;
+    }
+
+    /**
+     * Tipo resultante de operadores logicos (e, ou) entre operandos booleanos.
+     */
+    public static TipoLA tipoResultanteLogico(TipoLA t1, TipoLA t2) {
+        if (t1 == TipoLA.INDEFINIDO || t2 == TipoLA.INDEFINIDO) {
+            return TipoLA.INDEFINIDO;
+        }
+        if (t1 == TipoLA.LOGICO && t2 == TipoLA.LOGICO) {
+            return TipoLA.LOGICO;
+        }
         return TipoLA.INDEFINIDO;
     }
 }

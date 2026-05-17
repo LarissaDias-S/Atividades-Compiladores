@@ -3,6 +3,7 @@ package br.ufscar.dc.compiladores.la.lexico;
 import java.util.ArrayList;
 import java.util.List;
 
+
 /**
  * Visitador da AST gerada pelo ANTLR que realiza a analise semantica da LA.
  *
@@ -67,18 +68,16 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
      * Reporta erro se o identificador ou campo nao estiver declarado.
      */
     private TipoLA verificarIdentificador(LAParser.IdentificadorContext ctx) {
-        // Nome base - primeiro IDENT antes de qualquer '.'
         String nomePrincipal = ctx.IDENT(0).getText();
 
         if (!escopos.existeNaHierarquia(nomePrincipal)) {
             adicionarErro(ctx.start.getLine(),
-                    "identificador " + nomePrincipal + " nao declarado");
+                    "identificador " + ctx.getText() + " nao declarado");
             return TipoLA.INDEFINIDO;
         }
 
         Simbolo s = escopos.obterNaHierarquia(nomePrincipal);
 
-        // Acesso a campo de registro: ex p.nome -> ctx.IDENT() tem tamanho > 1
         if (ctx.IDENT().size() > 1) {
             String nomeCampo = ctx.IDENT(1).getText();
             Simbolo campoEncontrado = null;
@@ -97,6 +96,111 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
         }
 
         return s.getTipo();
+    }
+
+    /** Texto do lado esquerdo em atribuicoes (inclui '^' em desreferencias). */
+    private String textoLhsAtribuicao(LAParser.CmdAtribuicaoContext ctx) {
+        if (ctx.CIRCUNFLEXO() != null) {
+            return "^" + ctx.identificador().getText();
+        }
+        return ctx.identificador().getText();
+    }
+
+    /** Copia os campos de um tipo registro declarado com 'tipo' para uma variavel/parametro. */
+    private void copiarCamposDoTipo(Simbolo destino, String nomeTipo) {
+        if (escopos.existeNaHierarquia(nomeTipo)) {
+            for (Simbolo campo : escopos.obterNaHierarquia(nomeTipo).getCampos()) {
+                destino.adicionarCampo(campo);
+            }
+        }
+    }
+
+    /** Preenche campos de um simbolo a partir de um registro inline (declare ... : registro ...). */
+    private void preencherCamposRegistro(Simbolo destino, LAParser.RegistroContext regCtx) {
+        for (LAParser.VariavelContext vCtx : regCtx.variavel()) {
+            String tipoCampoStr   = vCtx.tipo().getText().replace("^", "");
+            TipoLA tipoCampoLA    = converterTipo(tipoCampoStr);
+            boolean campoPtr      = vCtx.tipo().getText().startsWith("^");
+            if (tipoCampoLA == TipoLA.INDEFINIDO && escopos.existeNaHierarquia(tipoCampoStr)) {
+                tipoCampoLA = escopos.obterNaHierarquia(tipoCampoStr).getTipo();
+            }
+            TipoLA tipoCampoFinal = campoPtr ? TipoLA.PONTEIRO : tipoCampoLA;
+            for (LAParser.IdentificadorContext idCtx : vCtx.identificador()) {
+                Simbolo campo = new Simbolo(
+                        idCtx.IDENT(0).getText(),
+                        Simbolo.Categoria.VARIAVEL,
+                        tipoCampoFinal,
+                        vCtx.tipo().getText());
+                if (tipoCampoLA == TipoLA.REGISTRO) {
+                    copiarCamposDoTipo(campo, tipoCampoStr);
+                }
+                destino.adicionarCampo(campo);
+            }
+        }
+    }
+
+    /**
+     * T4: valida argumentos vs parametros formais (quantidade e tipo exatos).
+     */
+    private void verificarChamadaSubrotina(int linha, String nome,
+            List<LAParser.ExpressaoContext> argumentos) {
+        Simbolo subrotina = escopos.obterNaHierarquia(nome);
+        if (subrotina == null) {
+            return;
+        }
+
+        List<Simbolo> params = subrotina.getParametros();
+        if (argumentos.size() != params.size()) {
+            adicionarErro(linha,
+                    "incompatibilidade de parametros na chamada de " + nome);
+            for (LAParser.ExpressaoContext exCtx : argumentos) {
+                visitExpressao(exCtx);
+            }
+            return;
+        }
+
+        boolean incompativel = false;
+        for (int i = 0; i < argumentos.size(); i++) {
+            TipoLA tipoArg = visitExpressao(argumentos.get(i));
+            if (!tiposCompativeisParametro(params.get(i), tipoArg, argumentos.get(i))) {
+                incompativel = true;
+            }
+        }
+        if (incompativel) {
+            adicionarErro(linha,
+                    "incompatibilidade de parametros na chamada de " + nome);
+        }
+    }
+
+    /**
+     * Compatibilidade estrita de argumento com parametro formal (tipos exatos).
+     */
+    private boolean tiposCompativeisParametro(Simbolo param, TipoLA tipoArg,
+            LAParser.ExpressaoContext exCtx) {
+        if (tipoArg == TipoLA.INDEFINIDO) {
+            return false;
+        }
+
+        TipoLA tipoParam = param.getTipo();
+
+        if (tipoParam == TipoLA.PONTEIRO && tipoArg == TipoLA.ENDERECO) {
+            return true;
+        }
+
+        if (tipoParam == TipoLA.REGISTRO && tipoArg == TipoLA.REGISTRO) {
+            String nomeArg = obterNomeIdentificadorExpressao(exCtx);
+            if (nomeArg != null && escopos.existeNaHierarquia(nomeArg)) {
+                Simbolo sArg = escopos.obterNaHierarquia(nomeArg);
+                String nomeParam = param.getNomeDoTipo() != null
+                        ? param.getNomeDoTipo().replace("^", "") : null;
+                String nomeOrigem = sArg.getNomeDoTipo() != null
+                        ? sArg.getNomeDoTipo().replace("^", "") : null;
+                return nomeParam != null && nomeParam.equals(nomeOrigem);
+            }
+            return false;
+        }
+
+        return tipoParam == tipoArg;
     }
 
     // =========================================================================
@@ -376,6 +480,13 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
         // Infere o tipo da expressao do lado direito
         TipoLA tipoExpressao = visitExpressao(ctx.expressao());
 
+        // RHS invalida (ex: literal + logico) -> INDEFINIDO inviabiliza a atribuicao
+        if (tipoVariavel != TipoLA.INDEFINIDO && tipoExpressao == TipoLA.INDEFINIDO) {
+            adicionarErro(ctx.identificador().start.getLine(),
+                    "atribuicao nao compativel para " + ctx.identificador().getText());
+            return null;
+        }
+
         // T4 (Erro 4): verifica compatibilidade, incluindo registro com mesmo nome
         if (tipoVariavel == TipoLA.REGISTRO && tipoExpressao == TipoLA.REGISTRO) {
             // Para registros, compara o nomeDoTipo dos dois simbolos
@@ -399,6 +510,33 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
         }
 
         return null;
+    }
+
+    /**
+     * Combina dois operandos aritmeticos/literais; retorna INDEFINIDO e reporta
+     * erro quando os tipos nao podem participar da mesma operacao.
+     */
+    private TipoLA combinarTiposExpressao(int linha, TipoLA t1, TipoLA t2) {
+        TipoLA resultado = Escopos.tipoResultanteExpressao(t1, t2);
+        if (resultado == TipoLA.INDEFINIDO
+                && t1 != TipoLA.INDEFINIDO
+                && t2 != TipoLA.INDEFINIDO) {
+            adicionarErro(linha, "tipo de expressao incompativel");
+        }
+        return resultado;
+    }
+
+    /**
+     * Combina operandos de operadores logicos (e, ou).
+     */
+    private TipoLA combinarTiposLogicos(int linha, TipoLA t1, TipoLA t2) {
+        TipoLA resultado = Escopos.tipoResultanteLogico(t1, t2);
+        if (resultado == TipoLA.INDEFINIDO
+                && t1 != TipoLA.INDEFINIDO
+                && t2 != TipoLA.INDEFINIDO) {
+            adicionarErro(linha, "tipo de expressao incompativel");
+        }
+        return resultado;
     }
 
     /**
@@ -527,8 +665,7 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
         TipoLA ret = visitTermo_logico(ctx.termo_logico(0));
         for (int i = 1; i < ctx.termo_logico().size(); i++) {
             TipoLA m = visitTermo_logico(ctx.termo_logico(i));
-            ret = (ret == TipoLA.LOGICO && m == TipoLA.LOGICO)
-                    ? TipoLA.LOGICO : TipoLA.INDEFINIDO;
+            ret = combinarTiposLogicos(ctx.start.getLine(), ret, m);
         }
         return ret;
     }
@@ -538,8 +675,7 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
         TipoLA ret = visitFator_logico(ctx.fator_logico(0));
         for (int i = 1; i < ctx.fator_logico().size(); i++) {
             TipoLA m = visitFator_logico(ctx.fator_logico(i));
-            ret = (ret == TipoLA.LOGICO && m == TipoLA.LOGICO)
-                    ? TipoLA.LOGICO : TipoLA.INDEFINIDO;
+            ret = combinarTiposLogicos(ctx.start.getLine(), ret, m);
         }
         return ret;
     }
@@ -547,8 +683,15 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
     @Override
     public TipoLA visitFator_logico(LAParser.Fator_logicoContext ctx) {
         TipoLA t = visitParcela_logica(ctx.parcela_logica());
-        if (ctx.PALAVRA_CHAVE_NAO() != null && t != TipoLA.LOGICO) {
-            return TipoLA.INDEFINIDO;
+        if (ctx.PALAVRA_CHAVE_NAO() != null) {
+            if (t != TipoLA.LOGICO && t != TipoLA.INDEFINIDO) {
+                adicionarErro(ctx.start.getLine(), "tipo de expressao incompativel");
+                return TipoLA.INDEFINIDO;
+            }
+            if (t == TipoLA.INDEFINIDO) {
+                return TipoLA.INDEFINIDO;
+            }
+            return TipoLA.LOGICO;
         }
         return t;
     }
@@ -564,9 +707,7 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
         TipoLA t1 = visitExp_aritmetica(ctx.exp_aritmetica(0));
         if (ctx.exp_aritmetica().size() > 1) {
             TipoLA t2 = visitExp_aritmetica(ctx.exp_aritmetica(1));
-            if (!Escopos.verificarCompatibilidade(t1, t2) && t1 != TipoLA.INDEFINIDO) {
-                adicionarErro(ctx.start.getLine(), "tipo de expressao incompativel");
-            }
+            combinarTiposExpressao(ctx.start.getLine(), t1, t2);
             return TipoLA.LOGICO;
         }
         return t1;
@@ -577,7 +718,7 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
         TipoLA ret = visitTermo(ctx.termo(0));
         for (int i = 1; i < ctx.termo().size(); i++) {
             TipoLA m = visitTermo(ctx.termo(i));
-            ret = Escopos.tipoResultanteExpressao(ret, m);
+            ret = combinarTiposExpressao(ctx.start.getLine(), ret, m);
         }
         return ret;
     }
@@ -587,7 +728,7 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
         TipoLA ret = visitFator(ctx.fator(0));
         for (int i = 1; i < ctx.fator().size(); i++) {
             TipoLA m = visitFator(ctx.fator(i));
-            ret = Escopos.tipoResultanteExpressao(ret, m);
+            ret = combinarTiposExpressao(ctx.start.getLine(), ret, m);
         }
         return ret;
     }
@@ -597,15 +738,26 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
         TipoLA ret = visitParcela(ctx.parcela(0));
         for (int i = 1; i < ctx.parcela().size(); i++) {
             TipoLA m = visitParcela(ctx.parcela(i));
-            ret = Escopos.tipoResultanteExpressao(ret, m);
+            ret = combinarTiposExpressao(ctx.start.getLine(), ret, m);
         }
         return ret;
     }
 
     @Override
     public TipoLA visitParcela(LAParser.ParcelaContext ctx) {
-        if (ctx.parcela_unario() != null) return visitParcela_unario(ctx.parcela_unario());
-        return visitParcela_nao_unario(ctx.parcela_nao_unario());
+        TipoLA t;
+        if (ctx.parcela_unario() != null) {
+            t = visitParcela_unario(ctx.parcela_unario());
+        } else {
+            t = visitParcela_nao_unario(ctx.parcela_nao_unario());
+        }
+        if (ctx.op_unario() != null) {
+            if (t != TipoLA.INTEIRO && t != TipoLA.REAL && t != TipoLA.INDEFINIDO) {
+                adicionarErro(ctx.start.getLine(), "tipo de expressao incompativel");
+                return TipoLA.INDEFINIDO;
+            }
+        }
+        return t;
     }
 
     @Override
@@ -654,7 +806,7 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
         // Necessario para a regra: ponteiro <- endereco
         if (ctx.identificador() != null) {
             verificarIdentificador(ctx.identificador());
-            return TipoLA.ENDERECO; // T4: era PONTEIRO no T3, agora ENDERECO
+            return TipoLA.ENDERECO; 
         }
 
         return TipoLA.INDEFINIDO;

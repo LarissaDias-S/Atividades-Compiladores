@@ -5,52 +5,16 @@ import java.util.List;
 
 /**
  * Visitador da AST gerada pelo ANTLR que realiza a analise semantica da LA.
- *
- * T3 detectava 4 tipos de erros:
- *   1. Identificador ja declarado no mesmo escopo
- *   2. Tipo nao declarado
- *   3. Identificador nao declarado
- *   4. Atribuicao incompativel com o tipo declarado
- *
- * T4 expande para mais 5 tipos de erros:
- *   1. (Atualizado) Identificador ja declarado - agora inclui funcoes, procedimentos,
- *      ponteiros, registros; mesmo nome nao pode ser reutilizado para categorias
- *      diferentes no mesmo escopo.
- *   2. (Atualizado) Identificador nao declarado - inclui ponteiros, registros, funcoes.
- *   3. Incompatibilidade de argumentos em chamada de procedimento ou funcao
- *      (quantidade, ordem e tipo exatos).
- *   4. (Atualizado) Atribuicao incompativel - agora inclui ponteiros e registros.
- *   5. Uso do comando 'retorne' fora de uma funcao.
- *
- * Todos os erros sao acumulados em 'errosSemanticos' e impressos ao final,
- * pois a analise NAO interrompe ao encontrar um erro.
  */
 public class LASemantico extends LAParserBaseVisitor<TipoLA> {
 
-    /** Gerenciador de escopos - pilha de tabelas de simbolos */
     Escopos escopos = new Escopos();
-
-    /** Lista de mensagens de erro acumuladas durante a analise */
     public List<String> errosSemanticos = new ArrayList<>();
 
-    // -------------------------------------------------------------------------
-    // Utilitarios internos
-    // -------------------------------------------------------------------------
-
-    /**
-     * Registra um erro semantico formatado com numero de linha.
-     *
-     * @param linha    linha do codigo-fonte onde o erro ocorreu
-     * @param mensagem descricao do erro
-     */
     private void adicionarErro(int linha, String mensagem) {
         errosSemanticos.add("Linha " + linha + ": " + mensagem);
     }
 
-    /**
-     * Converte a string do tipo escrita no codigo-fonte para o enum TipoLA.
-     * Retorna INDEFINIDO para tipos nao reconhecidos (podem ser tipos customizados).
-     */
     private TipoLA converterTipo(String tipoStr) {
         switch (tipoStr) {
             case "inteiro":  return TipoLA.INTEIRO;
@@ -61,17 +25,11 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
         }
     }
 
-    /**
-     * Resolve o tipo de um identificador, incluindo acesso a campos de registro
-     * (ex: p.nome) e desreferenciacao de ponteiro (ex: ^p).
-     * Reporta erro se o identificador ou campo nao estiver declarado.
-     */
     private TipoLA verificarIdentificador(LAParser.IdentificadorContext ctx) {
         String nomePrincipal = ctx.IDENT(0).getText();
 
         if (!escopos.existeNaHierarquia(nomePrincipal)) {
-            adicionarErro(ctx.start.getLine(),
-                    "identificador " + ctx.getText() + " nao declarado");
+            adicionarErro(ctx.start.getLine(), "identificador " + ctx.getText() + " nao declarado");
             return TipoLA.INDEFINIDO;
         }
 
@@ -87,34 +45,22 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
                 }
             }
             if (campoEncontrado == null) {
-                adicionarErro(ctx.start.getLine(),
-                        "identificador " + nomePrincipal + "." + nomeCampo + " nao declarado");
+                adicionarErro(ctx.start.getLine(), "identificador " + nomePrincipal + "." + nomeCampo + " nao declarado");
                 return TipoLA.INDEFINIDO;
             }
             return campoEncontrado.getTipo();
         }
-
         return s.getTipo();
     }
 
-    /**
-     * T4: valida argumentos vs parametros formais (quantidade e tipo exatos).
-     * Agora corretamente referenciada nas visitas de chamadas
-     */
-    private void verificarChamadaSubrotina(int linha, String nome,
-            List<LAParser.ExpressaoContext> argumentos) {
+    private void verificarChamadaSubrotina(int linha, String nome, List<LAParser.ExpressaoContext> argumentos) {
         Simbolo subrotina = escopos.obterNaHierarquia(nome);
-        if (subrotina == null) {
-            return;
-        }
+        if (subrotina == null) return;
 
         List<Simbolo> params = subrotina.getParametros();
         if (argumentos.size() != params.size()) {
-            adicionarErro(linha,
-                    "incompatibilidade de parametros na chamada de " + nome);
-            for (LAParser.ExpressaoContext exCtx : argumentos) {
-                visitExpressao(exCtx);
-            }
+            adicionarErro(linha, "incompatibilidade de parametros na chamada de " + nome);
+            for (LAParser.ExpressaoContext exCtx : argumentos) visitExpressao(exCtx);
             return;
         }
 
@@ -126,45 +72,28 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
             }
         }
         if (incompativel) {
-            adicionarErro(linha,
-                    "incompatibilidade de parametros na chamada de " + nome);
+            adicionarErro(linha, "incompatibilidade de parametros na chamada de " + nome);
         }
     }
 
-    /**
-     * Compatibilidade estrita de argumento com parametro formal (tipos exatos).
-     */
-    private boolean tiposCompativeisParametro(Simbolo param, TipoLA tipoArg,
-            LAParser.ExpressaoContext exCtx) {
-        if (tipoArg == TipoLA.INDEFINIDO) {
-            return false;
-        }
-
+    private boolean tiposCompativeisParametro(Simbolo param, TipoLA tipoArg, LAParser.ExpressaoContext exCtx) {
+        if (tipoArg == TipoLA.INDEFINIDO) return false;
         TipoLA tipoParam = param.getTipo();
 
-        if (tipoParam == TipoLA.PONTEIRO && tipoArg == TipoLA.ENDERECO) {
-            return true;
-        }
+        if (tipoParam == TipoLA.PONTEIRO && tipoArg == TipoLA.ENDERECO) return true;
 
         if (tipoParam == TipoLA.REGISTRO && tipoArg == TipoLA.REGISTRO) {
             String nomeArg = obterNomeIdentificadorExpressao(exCtx);
             if (nomeArg != null && escopos.existeNaHierarquia(nomeArg)) {
                 Simbolo sArg = escopos.obterNaHierarquia(nomeArg);
-                String nomeParam = param.getNomeDoTipo() != null
-                        ? param.getNomeDoTipo().replace("^", "") : null;
-                String nomeOrigem = sArg.getNomeDoTipo() != null
-                        ? sArg.getNomeDoTipo().replace("^", "") : null;
+                String nomeParam = param.getNomeDoTipo() != null ? param.getNomeDoTipo().replace("^", "") : null;
+                String nomeOrigem = sArg.getNomeDoTipo() != null ? sArg.getNomeDoTipo().replace("^", "") : null;
                 return nomeParam != null && nomeParam.equals(nomeOrigem);
             }
             return false;
         }
-
         return tipoParam == tipoArg;
     }
-
-    // =========================================================================
-    // PONTO DE ENTRADA
-    // =========================================================================
 
     @Override
     public TipoLA visitPrograma(LAParser.ProgramaContext ctx) {
@@ -174,72 +103,75 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
         return null;
     }
 
-    // =========================================================================
-    // DECLARACOES LOCAIS (variaveis, constantes, tipos)
-    // =========================================================================
-
     @Override
     public TipoLA visitDeclaracao_local(LAParser.Declaracao_localContext ctx) {
-
         if (ctx.variavel() != null) {
-            String tipoTexto = ctx.variavel().tipo().getText();
-            String tipoBase    = tipoTexto.replace("^", "");
-            boolean isPonteiro = tipoTexto.startsWith("^");
-
-            TipoLA tipoLA = converterTipo(tipoBase);
-
-            boolean tipoCustomizado = (tipoLA == TipoLA.INDEFINIDO);
-            if (tipoCustomizado) {
-                if (!escopos.existeNaHierarquia(tipoBase)) {
-                    adicionarErro(ctx.variavel().tipo().start.getLine(),
-                            "tipo " + tipoBase + " nao declarado");
-                } else {
-                    Simbolo sTipo = escopos.obterNaHierarquia(tipoBase);
-                    tipoLA = sTipo.getTipo(); 
-                }
-            }
-
-            TipoLA tipoFinal = isPonteiro ? TipoLA.PONTEIRO : tipoLA;
-
-            for (LAParser.IdentificadorContext idCtx : ctx.variavel().identificador()) {
-                String nome = idCtx.IDENT(0).getText();
-
-                if (escopos.existeNoEscopoAtual(nome)) {
-                    adicionarErro(idCtx.start.getLine(),
-                            "identificador " + nome + " ja declarado anteriormente");
-                } else {
-                    Simbolo s = new Simbolo(nome, Simbolo.Categoria.VARIAVEL, tipoFinal, tipoTexto);
-                    if (tipoLA == TipoLA.REGISTRO && escopos.existeNaHierarquia(tipoBase)) {
-                        for (Simbolo campo : escopos.obterNaHierarquia(tipoBase).getCampos()) {
-                            s.adicionarCampo(campo);
+            if (ctx.variavel().tipo().registro() != null) {
+                for (LAParser.IdentificadorContext idCtx : ctx.variavel().identificador()) {
+                    String nome = idCtx.IDENT(0).getText();
+                    if (escopos.existeNoEscopoAtual(nome)) {
+                        adicionarErro(idCtx.start.getLine(), "identificador " + nome + " ja declarado anteriormente");
+                    } else {
+                        Simbolo sRegistro = new Simbolo(nome, Simbolo.Categoria.VARIAVEL, TipoLA.REGISTRO, "registro");
+                        for (LAParser.VariavelContext vCtx : ctx.variavel().tipo().registro().variavel()) {
+                            String tipoCampoStr = vCtx.tipo().getText().replace("^", "");
+                            TipoLA tipoCampoLA = converterTipo(tipoCampoStr);
+                            boolean campoPtr = vCtx.tipo().getText().startsWith("^");
+                            TipoLA tipoCampoFinal = campoPtr ? TipoLA.PONTEIRO : tipoCampoLA;
+                            for (LAParser.IdentificadorContext idCampoCtx : vCtx.identificador()) {
+                                sRegistro.adicionarCampo(new Simbolo(idCampoCtx.IDENT(0).getText(), Simbolo.Categoria.VARIAVEL, tipoCampoFinal, vCtx.tipo().getText()));
+                            }
                         }
+                        escopos.adicionarNoEscopoAtual(nome, sRegistro);
                     }
-                    escopos.adicionarNoEscopoAtual(nome, s);
+                }
+            } else {
+                String tipoTexto = ctx.variavel().tipo().getText();
+                String tipoBase    = tipoTexto.replace("^", "");
+                boolean isPonteiro = tipoTexto.startsWith("^");
+                TipoLA tipoLA = converterTipo(tipoBase);
+
+                if (tipoLA == TipoLA.INDEFINIDO) {
+                    if (!escopos.existeNaHierarquia(tipoBase)) {
+                        adicionarErro(ctx.variavel().tipo().start.getLine(), "tipo " + tipoBase + " nao declarado");
+                    } else {
+                        Simbolo sTipo = escopos.obterNaHierarquia(tipoBase);
+                        tipoLA = sTipo.getTipo(); 
+                    }
+                }
+
+                TipoLA tipoFinal = isPonteiro ? TipoLA.PONTEIRO : tipoLA;
+
+                for (LAParser.IdentificadorContext idCtx : ctx.variavel().identificador()) {
+                    String nome = idCtx.IDENT(0).getText();
+                    if (escopos.existeNoEscopoAtual(nome)) {
+                        adicionarErro(idCtx.start.getLine(), "identificador " + nome + " ja declarado anteriormente");
+                    } else {
+                        Simbolo s = new Simbolo(nome, Simbolo.Categoria.VARIAVEL, tipoFinal, tipoTexto);
+                        if (tipoLA == TipoLA.REGISTRO && escopos.existeNaHierarquia(tipoBase)) {
+                            for (Simbolo campo : escopos.obterNaHierarquia(tipoBase).getCampos()) s.adicionarCampo(campo);
+                        }
+                        escopos.adicionarNoEscopoAtual(nome, s);
+                    }
                 }
             }
         }
         else if (ctx.getChildCount() > 0 && ctx.getChild(0).getText().equals("constante")) {
             String nomeConst = ctx.IDENT().getText();
-
             if (escopos.existeNoEscopoAtual(nomeConst)) {
-                adicionarErro(ctx.IDENT().getSymbol().getLine(),
-                        "identificador " + nomeConst + " ja declarado anteriormente");
+                adicionarErro(ctx.IDENT().getSymbol().getLine(), "identificador " + nomeConst + " ja declarado anteriormente");
             } else {
                 TipoLA tipoConst = converterTipo(ctx.tipo_basico().getText());
-                escopos.adicionarNoEscopoAtual(nomeConst,
-                        new Simbolo(nomeConst, Simbolo.Categoria.CONSTANTE, tipoConst));
+                escopos.adicionarNoEscopoAtual(nomeConst, new Simbolo(nomeConst, Simbolo.Categoria.CONSTANTE, tipoConst));
             }
         }
         else if (ctx.getChildCount() > 0 && ctx.getChild(0).getText().equals("tipo")) {
             String nomeTipo = ctx.IDENT().getText();
-
             if (escopos.existeNoEscopoAtual(nomeTipo)) {
-                adicionarErro(ctx.IDENT().getSymbol().getLine(),
-                        "identificador " + nomeTipo + " ja declarado anteriormente");
+                adicionarErro(ctx.IDENT().getSymbol().getLine(), "identificador " + nomeTipo + " ja declarado anteriormente");
             } else {
                 TipoLA tipoBase;
                 Simbolo sTipo;
-
                 if (ctx.tipo().registro() != null) {
                     tipoBase = TipoLA.REGISTRO;
                     sTipo = new Simbolo(nomeTipo, Simbolo.Categoria.TIPO, tipoBase, nomeTipo);
@@ -249,29 +181,19 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
                         boolean campoPtr      = vCtx.tipo().getText().startsWith("^");
                         TipoLA tipoCampoFinal = campoPtr ? TipoLA.PONTEIRO : tipoCampoLA;
                         for (LAParser.IdentificadorContext idCtx : vCtx.identificador()) {
-                            sTipo.adicionarCampo(new Simbolo(
-                                    idCtx.IDENT(0).getText(),
-                                    Simbolo.Categoria.VARIAVEL,
-                                    tipoCampoFinal,
-                                    vCtx.tipo().getText()));
+                            sTipo.adicionarCampo(new Simbolo(idCtx.IDENT(0).getText(), Simbolo.Categoria.VARIAVEL, tipoCampoFinal, vCtx.tipo().getText()));
                         }
                     }
                 } else {
                     String textoTipo = ctx.tipo().getText().replace("^", "");
                     tipoBase = converterTipo(textoTipo);
-                    sTipo = new Simbolo(nomeTipo, Simbolo.Categoria.TIPO,
-                                        tipoBase, ctx.tipo().getText());
+                    sTipo = new Simbolo(nomeTipo, Simbolo.Categoria.TIPO, tipoBase, ctx.tipo().getText());
                 }
                 escopos.adicionarNoEscopoAtual(nomeTipo, sTipo);
             }
         }
-
         return null;
     }
-
-    // =========================================================================
-    // DECLARACOES GLOBAIS (funcoes e procedimentos)
-    // =========================================================================
 
     @Override
     public TipoLA visitDeclaracao_global(LAParser.Declaracao_globalContext ctx) {
@@ -279,8 +201,7 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
         boolean isFuncao = ctx.getChild(0).getText().equals("funcao");
 
         if (escopos.existeNoEscopoAtual(nome)) {
-            adicionarErro(ctx.IDENT().getSymbol().getLine(),
-                    "identificador " + nome + " ja declarado anteriormente");
+            adicionarErro(ctx.IDENT().getSymbol().getLine(), "identificador " + nome + " ja declarado anteriormente");
         } else {
             TipoLA tipoRetorno = TipoLA.INDEFINIDO;
             if (isFuncao && ctx.tipo_estendido() != null) {
@@ -291,10 +212,7 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
                 }
             }
 
-            Simbolo.Categoria cat = isFuncao
-                    ? Simbolo.Categoria.FUNCAO
-                    : Simbolo.Categoria.PROCEDIMENTO;
-
+            Simbolo.Categoria cat = isFuncao ? Simbolo.Categoria.FUNCAO : Simbolo.Categoria.PROCEDIMENTO;
             Simbolo sSubrotina = new Simbolo(nome, cat, tipoRetorno);
             sSubrotina.setTipoRetorno(tipoRetorno);
 
@@ -304,24 +222,18 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
                     boolean isPonteiro  = pCtx.tipo_estendido().getText().startsWith("^");
                     TipoLA tipoParam    = converterTipo(tipoParamStr);
 
-                    if (tipoParam == TipoLA.INDEFINIDO
-                            && escopos.existeNaHierarquia(tipoParamStr)) {
+                    if (tipoParam == TipoLA.INDEFINIDO && escopos.existeNaHierarquia(tipoParamStr)) {
                         tipoParam = escopos.obterNaHierarquia(tipoParamStr).getTipo();
                     }
-
                     TipoLA tipoFinal = isPonteiro ? TipoLA.PONTEIRO : tipoParam;
 
                     for (LAParser.IdentificadorContext idCtx : pCtx.identificador()) {
                         String nomeParam = idCtx.IDENT(0).getText();
-                        Simbolo sParam = new Simbolo(nomeParam,
-                                Simbolo.Categoria.VARIAVEL,
-                                tipoFinal,
-                                pCtx.tipo_estendido().getText());
+                        Simbolo sParam = new Simbolo(nomeParam, Simbolo.Categoria.VARIAVEL, tipoFinal, pCtx.tipo_estendido().getText());
                         sSubrotina.adicionarParametro(sParam);
                     }
                 }
             }
-
             escopos.adicionarNoEscopoAtual(nome, sSubrotina);
         }
 
@@ -333,77 +245,67 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
                 boolean isPonteiro  = pCtx.tipo_estendido().getText().startsWith("^");
                 TipoLA tipoParam    = converterTipo(tipoParamStr);
 
-                if (tipoParam == TipoLA.INDEFINIDO
-                        && escopos.existeNaHierarquia(tipoParamStr)) {
+                if (tipoParam == TipoLA.INDEFINIDO && escopos.existeNaHierarquia(tipoParamStr)) {
                     tipoParam = escopos.obterNaHierarquia(tipoParamStr).getTipo();
                 }
-
                 TipoLA tipoFinal = isPonteiro ? TipoLA.PONTEIRO : tipoParam;
 
                 for (LAParser.IdentificadorContext idCtx : pCtx.identificador()) {
                     String nomeParam = idCtx.IDENT(0).getText();
                     if (escopos.existeNoEscopoAtual(nomeParam)) {
-                        adicionarErro(idCtx.start.getLine(),
-                                "identificador " + nomeParam + " ja declarado anteriormente");
+                        adicionarErro(idCtx.start.getLine(), "identificador " + nomeParam + " ja declarado anteriormente");
                     } else {
-                        escopos.adicionarNoEscopoAtual(nomeParam,
-                                new Simbolo(nomeParam, Simbolo.Categoria.VARIAVEL,
-                                            tipoFinal, pCtx.tipo_estendido().getText()));
+                        Simbolo sParamLocal = new Simbolo(nomeParam, Simbolo.Categoria.VARIAVEL, tipoFinal, pCtx.tipo_estendido().getText());
+                        
+                        // CORREÇÃO MÁGICA: Cópia dos campos do registro para o parâmetro local da função!
+                        if (tipoParam == TipoLA.REGISTRO && escopos.existeNaHierarquia(tipoParamStr)) {
+                            for (Simbolo campo : escopos.obterNaHierarquia(tipoParamStr).getCampos()) {
+                                sParamLocal.adicionarCampo(campo);
+                            }
+                        }
+                        
+                        escopos.adicionarNoEscopoAtual(nomeParam, sParamLocal);
                     }
                 }
             }
         }
 
-        for (LAParser.Declaracao_localContext dlCtx : ctx.declaracao_local()) {
-            visitDeclaracao_local(dlCtx);
-        }
-        for (LAParser.CmdContext cmdCtx : ctx.cmd()) {
-            visit(cmdCtx);
-        }
+        for (LAParser.Declaracao_localContext dlCtx : ctx.declaracao_local()) visitDeclaracao_local(dlCtx);
+        for (LAParser.CmdContext cmdCtx : ctx.cmd()) visit(cmdCtx);
 
         escopos.sairEscopo();
         return null;
     }
 
-    // =========================================================================
-    // COMANDOS
-    // =========================================================================
-
     @Override
     public TipoLA visitCmdLeia(LAParser.CmdLeiaContext ctx) {
-        for (LAParser.IdentificadorContext idCtx : ctx.identificador()) {
-            verificarIdentificador(idCtx);
-        }
+        for (LAParser.IdentificadorContext idCtx : ctx.identificador()) verificarIdentificador(idCtx);
         return null;
     }
 
     @Override
     public TipoLA visitCmdEscreva(LAParser.CmdEscrevaContext ctx) {
-        for (LAParser.ExpressaoContext exCtx : ctx.expressao()) {
-            visitExpressao(exCtx);
-        }
+        for (LAParser.ExpressaoContext exCtx : ctx.expressao()) visitExpressao(exCtx);
         return null;
     }
 
     @Override
     public TipoLA visitCmdAtribuicao(LAParser.CmdAtribuicaoContext ctx) {
         String nomeVar = ctx.identificador().IDENT(0).getText();
+        String textoLhs = ctx.CIRCUNFLEXO() != null ? "^" + ctx.identificador().getText() : ctx.identificador().getText();
 
         if (!escopos.existeNaHierarquia(nomeVar)) {
-            adicionarErro(ctx.identificador().start.getLine(),
-                    "identificador " + nomeVar + " nao declarado");
+            adicionarErro(ctx.identificador().start.getLine(), "identificador " + nomeVar + " nao declarado");
             return null;
         }
 
         TipoLA tipoVariavel = verificarIdentificador(ctx.identificador());
 
-        // CORREÇÃO T4: Se ha '^', acessamos o valor apontado. Extraimos o tipo base.
         if (ctx.CIRCUNFLEXO() != null) {
             Simbolo sPonteiro = escopos.obterNaHierarquia(nomeVar);
             if (sPonteiro != null && sPonteiro.getNomeDoTipo() != null) {
                 String tipoBaseStr = sPonteiro.getNomeDoTipo().replace("^", "");
                 tipoVariavel = converterTipo(tipoBaseStr);
-                
                 if (tipoVariavel == TipoLA.INDEFINIDO && escopos.existeNaHierarquia(tipoBaseStr)) {
                     tipoVariavel = escopos.obterNaHierarquia(tipoBaseStr).getTipo();
                 }
@@ -413,8 +315,7 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
         TipoLA tipoExpressao = visitExpressao(ctx.expressao());
 
         if (tipoVariavel != TipoLA.INDEFINIDO && tipoExpressao == TipoLA.INDEFINIDO) {
-            adicionarErro(ctx.identificador().start.getLine(),
-                    "atribuicao nao compativel para " + ctx.identificador().getText());
+            adicionarErro(ctx.identificador().start.getLine(), "atribuicao nao compativel para " + textoLhs);
             return null;
         }
 
@@ -426,16 +327,13 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
                 String nomeDestino = sDestino != null ? sDestino.getNomeDoTipo() : null;
                 String nomeOrigem  = sOrigem  != null ? sOrigem.getNomeDoTipo()  : null;
                 if (nomeDestino == null || !nomeDestino.equals(nomeOrigem)) {
-                    adicionarErro(ctx.identificador().start.getLine(),
-                            "atribuicao nao compativel para " + ctx.identificador().getText());
+                    adicionarErro(ctx.identificador().start.getLine(), "atribuicao nao compativel para " + textoLhs);
                 }
             } else {
-                adicionarErro(ctx.identificador().start.getLine(),
-                        "atribuicao nao compativel para " + ctx.identificador().getText());
+                adicionarErro(ctx.identificador().start.getLine(), "atribuicao nao compativel para " + textoLhs);
             }
         } else if (!Escopos.verificarCompatibilidade(tipoVariavel, tipoExpressao)) {
-            adicionarErro(ctx.identificador().start.getLine(),
-                    "atribuicao nao compativel para " + ctx.identificador().getText());
+            adicionarErro(ctx.identificador().start.getLine(), "atribuicao nao compativel para " + textoLhs);
         }
 
         return null;
@@ -443,9 +341,7 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
 
     private TipoLA combinarTiposExpressao(int linha, TipoLA t1, TipoLA t2) {
         TipoLA resultado = Escopos.tipoResultanteExpressao(t1, t2);
-        if (resultado == TipoLA.INDEFINIDO
-                && t1 != TipoLA.INDEFINIDO
-                && t2 != TipoLA.INDEFINIDO) {
+        if (resultado == TipoLA.INDEFINIDO && t1 != TipoLA.INDEFINIDO && t2 != TipoLA.INDEFINIDO) {
             adicionarErro(linha, "tipo de expressao incompativel");
         }
         return resultado;
@@ -453,9 +349,7 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
 
     private TipoLA combinarTiposLogicos(int linha, TipoLA t1, TipoLA t2) {
         TipoLA resultado = Escopos.tipoResultanteLogico(t1, t2);
-        if (resultado == TipoLA.INDEFINIDO
-                && t1 != TipoLA.INDEFINIDO
-                && t2 != TipoLA.INDEFINIDO) {
+        if (resultado == TipoLA.INDEFINIDO && t1 != TipoLA.INDEFINIDO && t2 != TipoLA.INDEFINIDO) {
             adicionarErro(linha, "tipo de expressao incompativel");
         }
         return resultado;
@@ -463,46 +357,25 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
 
     private String obterNomeIdentificadorExpressao(LAParser.ExpressaoContext ctx) {
         try {
-            LAParser.Parcela_unarioContext pu = ctx
-                    .termo_logico(0)
-                    .fator_logico(0)
-                    .parcela_logica()
-                    .exp_relacional()
-                    .exp_aritmetica(0)
-                    .termo(0)
-                    .fator(0)
-                    .parcela(0)
-                    .parcela_unario();
-            if (pu != null && pu.identificador() != null) {
-                return pu.identificador().IDENT(0).getText();
-            }
-        } catch (Exception e) {
-            // Ignorado
-        }
+            LAParser.Parcela_unarioContext pu = ctx.termo_logico(0).fator_logico(0).parcela_logica().exp_relacional().exp_aritmetica(0).termo(0).fator(0).parcela(0).parcela_unario();
+            if (pu != null && pu.identificador() != null) return pu.identificador().IDENT(0).getText();
+        } catch (Exception e) {}
         return null;
     }
 
     @Override
     public TipoLA visitCmdSe(LAParser.CmdSeContext ctx) {
         TipoLA tipoCond = visitExpressao(ctx.expressao());
-        if (tipoCond != TipoLA.LOGICO && tipoCond != TipoLA.INDEFINIDO) {
-            adicionarErro(ctx.start.getLine(), "tipo de expressao incompativel");
-        }
-        for (LAParser.CmdContext cmdCtx : ctx.cmd()) {
-            visit(cmdCtx);
-        }
+        if (tipoCond != TipoLA.LOGICO && tipoCond != TipoLA.INDEFINIDO) adicionarErro(ctx.start.getLine(), "tipo de expressao incompativel");
+        for (LAParser.CmdContext cmdCtx : ctx.cmd()) visit(cmdCtx);
         return null;
     }
 
     @Override
     public TipoLA visitCmdEnquanto(LAParser.CmdEnquantoContext ctx) {
         TipoLA tipoCond = visitExpressao(ctx.expressao());
-        if (tipoCond != TipoLA.LOGICO && tipoCond != TipoLA.INDEFINIDO) {
-            adicionarErro(ctx.start.getLine(), "tipo de expressao incompativel");
-        }
-        for (LAParser.CmdContext cmdCtx : ctx.cmd()) {
-            visit(cmdCtx);
-        }
+        if (tipoCond != TipoLA.LOGICO && tipoCond != TipoLA.INDEFINIDO) adicionarErro(ctx.start.getLine(), "tipo de expressao incompativel");
+        for (LAParser.CmdContext cmdCtx : ctx.cmd()) visit(cmdCtx);
         return null;
     }
 
@@ -510,29 +383,19 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
     public TipoLA visitCmdPara(LAParser.CmdParaContext ctx) {
         String nomeVar = ctx.IDENT().getText();
         if (!escopos.existeNaHierarquia(nomeVar)) {
-            adicionarErro(ctx.start.getLine(),
-                    "identificador " + nomeVar + " nao declarado");
+            adicionarErro(ctx.start.getLine(), "identificador " + nomeVar + " nao declarado");
         } else {
             Simbolo s = escopos.obterNaHierarquia(nomeVar);
-            if (s.getTipo() != TipoLA.INTEIRO) {
-                adicionarErro(ctx.start.getLine(), "tipo de expressao incompativel");
-            }
+            if (s.getTipo() != TipoLA.INTEIRO) adicionarErro(ctx.start.getLine(), "tipo de expressao incompativel");
         }
-        for (LAParser.Exp_aritmeticaContext eaCtx : ctx.exp_aritmetica()) {
-            visitExp_aritmetica(eaCtx);
-        }
-        for (LAParser.CmdContext cmdCtx : ctx.cmd()) {
-            visit(cmdCtx);
-        }
+        for (LAParser.Exp_aritmeticaContext eaCtx : ctx.exp_aritmetica()) visitExp_aritmetica(eaCtx);
+        for (LAParser.CmdContext cmdCtx : ctx.cmd()) visit(cmdCtx);
         return null;
     }
 
     @Override
     public TipoLA visitCmdRetorne(LAParser.CmdRetorneContext ctx) {
-        if (!escopos.estaDentroFuncao()) {
-            adicionarErro(ctx.start.getLine(),
-                    "comando retorne nao permitido nesse escopo");
-        }
+        if (!escopos.estaDentroFuncao()) adicionarErro(ctx.start.getLine(), "comando retorne nao permitido nesse escopo");
         visitExpressao(ctx.expressao());
         return null;
     }
@@ -540,22 +403,13 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
     @Override
     public TipoLA visitCmdChamada(LAParser.CmdChamadaContext ctx) {
         String nomeProc = ctx.IDENT().getText();
-
         if (!escopos.existeNaHierarquia(nomeProc)) {
-            adicionarErro(ctx.start.getLine(),
-                    "identificador " + nomeProc + " nao declarado");
+            adicionarErro(ctx.start.getLine(), "identificador " + nomeProc + " nao declarado");
             return null;
         }
-
-        // T4: Chama a logica da Pessoa 2 para validar parametros!
         verificarChamadaSubrotina(ctx.start.getLine(), nomeProc, ctx.expressao());
-        
         return null;
     }
-
-    // =========================================================================
-    // EXPRESSOES - inferencia de tipos
-    // =========================================================================
 
     @Override
     public TipoLA visitExpressao(LAParser.ExpressaoContext ctx) {
@@ -585,9 +439,7 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
                 adicionarErro(ctx.start.getLine(), "tipo de expressao incompativel");
                 return TipoLA.INDEFINIDO;
             }
-            if (t == TipoLA.INDEFINIDO) {
-                return TipoLA.INDEFINIDO;
-            }
+            if (t == TipoLA.INDEFINIDO) return TipoLA.INDEFINIDO;
             return TipoLA.LOGICO;
         }
         return t;
@@ -663,27 +515,32 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
         if (ctx.NUM_REAL() != null) return TipoLA.REAL;
 
         if (ctx.identificador() != null) {
+            if (ctx.getText().contains("(")) {
+                String nomeFuncao = ctx.identificador().IDENT(0).getText();
+                if (!escopos.existeNaHierarquia(nomeFuncao)) {
+                    adicionarErro(ctx.start.getLine(), "identificador " + nomeFuncao + " nao declarado");
+                    return TipoLA.INDEFINIDO;
+                }
+                verificarChamadaSubrotina(ctx.start.getLine(), nomeFuncao, ctx.expressao());
+                Simbolo sFuncao = escopos.obterNaHierarquia(nomeFuncao);
+                return sFuncao.getTipoRetorno() != null ? sFuncao.getTipoRetorno() : sFuncao.getTipo();
+            }
             return verificarIdentificador(ctx.identificador());
-        }
-
-        if (ctx.expressao() != null && !ctx.expressao().isEmpty()) {
-            return visitExpressao(ctx.expressao(0));
         }
 
         if (ctx.IDENT() != null) {
             String nomeFuncao = ctx.IDENT().getText();
             if (!escopos.existeNaHierarquia(nomeFuncao)) {
-                adicionarErro(ctx.start.getLine(),
-                        "identificador " + nomeFuncao + " nao declarado");
+                adicionarErro(ctx.start.getLine(), "identificador " + nomeFuncao + " nao declarado");
                 return TipoLA.INDEFINIDO;
             }
-            Simbolo sFuncao = escopos.obterNaHierarquia(nomeFuncao);
-            
-            // T4: Chama a logica da Pessoa 2 para validar parametros de funcao!
             verificarChamadaSubrotina(ctx.start.getLine(), nomeFuncao, ctx.expressao());
+            Simbolo sFuncao = escopos.obterNaHierarquia(nomeFuncao);
+            return sFuncao.getTipoRetorno() != null ? sFuncao.getTipoRetorno() : sFuncao.getTipo();
+        }
 
-            TipoLA ret = sFuncao.getTipoRetorno();
-            return (ret != null) ? ret : sFuncao.getTipo();
+        if (ctx.expressao() != null && !ctx.expressao().isEmpty()) {
+            return visitExpressao(ctx.expressao(0));
         }
 
         return TipoLA.INDEFINIDO;

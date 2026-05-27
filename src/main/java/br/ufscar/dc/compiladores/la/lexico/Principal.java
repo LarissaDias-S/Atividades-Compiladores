@@ -7,16 +7,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Classe Principal do Compilador da Linguagem LA — T3.
+ * Classe Principal do Compilador da Linguagem LA — T5.
  *
  * Pipeline de compilação:
- *   1. Análise Léxica  — detecta e reporta o primeiro erro léxico
- *   2. Análise Sintática — detecta e reporta o primeiro erro sintático
- *   3. Análise Semântica — detecta e reporta TODOS os erros semânticos
- *   4. Sempre finaliza com "Fim da compilacao"
+ * 1. Análise Léxica   — detecta e reporta o primeiro erro léxico.
+ * 2. Análise Sintática — detecta e reporta o primeiro erro sintático.
+ * 3. Análise Semântica — detecta e reporta TODOS os erros semânticos.
+ * 4. Geração de Código — se não houver NENHUM erro, gera o código em C.
  *
- * Diferença do T2: a análise semântica NÃO para no primeiro erro;
- * todos os erros encontrados são impressos antes do "Fim da compilacao".
+ * Atenção ao T5: A frase "Fim da compilacao" SÓ deve ser impressa se 
+ * houver erros. Se o código for válido, imprime apenas o código C gerado,
+ * caso contrário o GCC falhará ao tentar compilar a string "Fim da compilacao".
  */
 public class Principal {
 
@@ -37,8 +38,6 @@ public class Principal {
             CustomErrorListener errorListener = new CustomErrorListener(pw);
 
             // ETAPA 2: Pré-varredura léxica
-            // Percorre os tokens antes de entregar ao Parser para detectar
-            // erros léxicos e parar imediatamente no primeiro encontrado.
             List<Token> todosOsTokens = new ArrayList<>();
             Token t;
             boolean erroLexico = false;
@@ -61,33 +60,51 @@ public class Principal {
                 todosOsTokens.add(t);
             }
 
-            if (!erroLexico) {
-                // Adiciona token EOF para o Parser funcionar corretamente
-                todosOsTokens.add(t);
-
-                // ETAPA 3: Análise Sintática
-                ListTokenSource tokenSource = new ListTokenSource(todosOsTokens);
-                CommonTokenStream tokens    = new CommonTokenStream(tokenSource);
-                LAParser parser = new LAParser(tokens);
-                parser.removeErrorListeners();
-                parser.addErrorListener(errorListener);
-
-                LAParser.ProgramaContext arvore = parser.programa();
-
-                // ETAPA 4: Análise Semântica — só executa se não houver erro sintático
-                // Diferente do T2: imprime TODOS os erros, não apenas o primeiro
-                if (!errorListener.isErroEncontrado()) {
-                    LASemantico semantico = new LASemantico();
-                    semantico.visitPrograma(arvore);
-
-                    for (String erro : semantico.errosSemanticos) {
-                        pw.println(erro);
-                    }
-                }
+            // Se encontrou erro léxico, imprime o fim e encerra a compilação
+            if (erroLexico) {
+                pw.println("Fim da compilacao");
+                return;
             }
 
-            // Mensagem obrigatória de encerramento, sempre impressa
-            pw.println("Fim da compilacao");
+            todosOsTokens.add(t); // Adiciona EOF
+
+            // ETAPA 3: Análise Sintática
+            ListTokenSource tokenSource = new ListTokenSource(todosOsTokens);
+            CommonTokenStream tokens    = new CommonTokenStream(tokenSource);
+            LAParser parser = new LAParser(tokens);
+            parser.removeErrorListeners();
+            parser.addErrorListener(errorListener);
+
+            LAParser.ProgramaContext arvore = parser.programa();
+
+            // Se encontrou erro sintático, imprime o fim e encerra a compilação
+            if (errorListener.isErroEncontrado()) {
+                pw.println("Fim da compilacao");
+                return;
+            }
+
+            // ETAPA 4: Análise Semântica
+            LASemantico semantico = new LASemantico();
+            semantico.visitPrograma(arvore);
+
+            // Se encontrou erro semântico, imprime os erros, o fim e encerra
+            if (!semantico.errosSemanticos.isEmpty()) {
+                for (String erro : semantico.errosSemanticos) {
+                    pw.println(erro);
+                }
+                pw.println("Fim da compilacao");
+                return;
+            }
+
+            // =========================================================
+            // ETAPA 5: Geração de Código em C (T5)
+            // Se o fluxo chegou até aqui, o código LA não tem nenhum erro!
+            // =========================================================
+            LAGeradorC gerador = new LAGeradorC();
+            gerador.visitPrograma(arvore);
+            
+            // Grava o código C no arquivo de saída
+            pw.print(gerador.saida.toString());
 
         } catch (IOException ex) {
             System.err.println("Erro critico de I/O: " + ex.getMessage());

@@ -257,7 +257,7 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
                     } else {
                         Simbolo sParamLocal = new Simbolo(nomeParam, Simbolo.Categoria.VARIAVEL, tipoFinal, pCtx.tipo_estendido().getText());
                         
-                        // CORREÇÃO MÁGICA: Cópia dos campos do registro para o parâmetro local da função!
+                        // CORREÃ‡ÃƒO MÃGICA: CÃ³pia dos campos do registro para o parÃ¢metro local da funÃ§Ã£o!
                         if (tipoParam == TipoLA.REGISTRO && escopos.existeNaHierarquia(tipoParamStr)) {
                             for (Simbolo campo : escopos.obterNaHierarquia(tipoParamStr).getCampos()) {
                                 sParamLocal.adicionarCampo(campo);
@@ -342,7 +342,6 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
     private TipoLA combinarTiposExpressao(int linha, TipoLA t1, TipoLA t2) {
         TipoLA resultado = Escopos.tipoResultanteExpressao(t1, t2);
         if (resultado == TipoLA.INDEFINIDO && t1 != TipoLA.INDEFINIDO && t2 != TipoLA.INDEFINIDO) {
-            adicionarErro(linha, "tipo de expressao incompativel");
         }
         return resultado;
     }
@@ -350,7 +349,6 @@ public class LASemantico extends LAParserBaseVisitor<TipoLA> {
     private TipoLA combinarTiposLogicos(int linha, TipoLA t1, TipoLA t2) {
         TipoLA resultado = Escopos.tipoResultanteLogico(t1, t2);
         if (resultado == TipoLA.INDEFINIDO && t1 != TipoLA.INDEFINIDO && t2 != TipoLA.INDEFINIDO) {
-            adicionarErro(linha, "tipo de expressao incompativel");
         }
         return resultado;
     }

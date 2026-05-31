@@ -1,57 +1,261 @@
 package br.ufscar.dc.compiladores.la.lexico;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
- * Visitador responsÃ¡vel pela GeraÃ§Ã£o de CÃ³digo C (Trabalho 5).
+ * Visitador responsavel pela Geracao de Codigo C (Trabalho 5).
  *
- * <p>Percorre a AST gerada pelo ANTLR e traduz cada construÃ§Ã£o da
- * Linguagem Algoritmica (LA) para o equivalente em C.</p>
+ * <p>Percorre a AST gerada pelo ANTLR e traduz cada construcao da
+ * Linguagem Algoritmica (LA) para o equivalente em C executavel pelo GCC.</p>
  *
- * <h2>DivisÃ£o de responsabilidades:</h2>
+ * <h2>Divisao de responsabilidades:</h2>
  * <ul>
- *   <li><b>Pessoa 1</b> â€“ Esqueleto C, declaraÃ§Ãµes bÃ¡sicas, leia/escreva</li>
- *   <li><b>Pessoa 2</b> â€“ Estruturas de controle, operadores, ponteiros</li>
+ *   <li><b>Pessoa 1</b> – Esqueleto C, declaracoes basicas, leia/escreva</li>
+ *   <li><b>Pessoa 2</b> – Estruturas de controle, operadores, ponteiros</li>
+ *   <li><b>Pessoa 3</b> – Registros, sub-rotinas, constantes, documentacao e testes GCC</li>
  * </ul>
  */
 public class LAGeradorC extends LAParserBaseVisitor<Void> {
 
-    /** Acumula o cÃ³digo C traduzido linha a linha. */
+    /** Acumula o codigo C traduzido. */
     public StringBuilder saida = new StringBuilder();
 
     /**
-     * Guarda o tipo LA de cada variÃ¡vel declarada.
-     * Usado para escolher o formatador correto (%d, %f, %s) no printf/scanf.
+     * Mapeia identificadores (e campos como {@code reg.idade}) para o tipo LA.
+     * Usado para escolher formatadores corretos em printf/scanf.
      */
     private Map<String, String> tabelaTipos = new HashMap<>();
 
-    /** Controla o nÃ­vel de indentaÃ§Ã£o atual (1 = dentro do main). */
-    private int indent = 1;
+    /**
+     * Campos de tipos customizados ({@code tipo Nome: registro ...}).
+     * Chave: nome do tipo; valor: mapa campo -> tipo LA.
+     */
+    private Map<String, Map<String, String>> definicaoTipos = new HashMap<>();
+
+    /** Tipos typedef ja emitidos (evita redeclaracao). */
+    private Set<String> tiposDefinidos = new HashSet<>();
+
+    /** Indica se o codigo gerado usa strcpy (requer {@code #include <string.h>}). */
+    private boolean precisaStringH = false;
+
+    /** Nivel de indentacao atual (0 = escopo global). */
+    private int indent = 0;
 
     // =========================================================
-    // UTILITÃRIOS INTERNOS
+    // UTILITARIOS INTERNOS
     // =========================================================
 
-    /** Retorna uma string com `indent` nÃ­veis de 4 espaÃ§os. */
+    /** Retorna uma string com {@code indent} niveis de 4 espacos. */
     private String ind() {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < indent; i++) sb.append("    ");
         return sb.toString();
     }
 
+    /** Registra o tipo LA de um identificador ou campo composto. */
+    private void registrarTipo(String nome, String tipoLA) {
+        tabelaTipos.put(nome, tipoLA);
+    }
+
+    /** Copia os tipos dos campos de um tipo customizado para uma variavel. */
+    private void copiarCamposDoTipo(String nomeVar, String nomeTipo) {
+        Map<String, String> campos = definicaoTipos.get(nomeTipo);
+        if (campos == null) return;
+        for (Map.Entry<String, String> e : campos.entrySet()) {
+            registrarTipo(nomeVar + "." + e.getKey(), e.getValue());
+        }
+    }
+
+    /** Resolve o tipo LA de uma expressao percorrendo a arvore sintatica. */
+    private String inferirTipoExpressao(LAParser.ExpressaoContext ctx) {
+        if (ctx == null) return "inteiro";
+        String tipo = "inteiro";
+        for (LAParser.Termo_logicoContext tl : ctx.termo_logico()) {
+            String t = inferirTipoTermoLogico(tl);
+            if ("real".equals(t)) return "real";
+            if ("literal".equals(t)) return "literal";
+            tipo = t;
+        }
+        return tipo;
+    }
+
+    private String inferirTipoTermoLogico(LAParser.Termo_logicoContext ctx) {
+        String tipo = "inteiro";
+        for (LAParser.Fator_logicoContext fl : ctx.fator_logico()) {
+            String t = inferirTipoFatorLogico(fl);
+            if ("real".equals(t)) return "real";
+            if ("literal".equals(t)) return "literal";
+            tipo = t;
+        }
+        return tipo;
+    }
+
+    private String inferirTipoFatorLogico(LAParser.Fator_logicoContext ctx) {
+        LAParser.Parcela_logicaContext pl = ctx.parcela_logica();
+        if (pl.PALAVRA_CHAVE_VERDADEIRO() != null || pl.PALAVRA_CHAVE_FALSO() != null) {
+            return "logico";
+        }
+        return inferirTipoExpRelacional(pl.exp_relacional());
+    }
+
+    private String inferirTipoExpRelacional(LAParser.Exp_relacionalContext ctx) {
+        String t1 = inferirTipoExpAritmetica(ctx.exp_aritmetica(0));
+        if (ctx.op_relacional() != null) return "logico";
+        return t1;
+    }
+
+    private String inferirTipoExpAritmetica(LAParser.Exp_aritmeticaContext ctx) {
+        String tipo = inferirTipoTermo(ctx.termo(0));
+        for (int i = 1; i < ctx.termo().size(); i++) {
+            String t = inferirTipoTermo(ctx.termo(i));
+            if ("real".equals(tipo) || "real".equals(t)) return "real";
+        }
+        return tipo;
+    }
+
+    private String inferirTipoTermo(LAParser.TermoContext ctx) {
+        String tipo = inferirTipoFator(ctx.fator(0));
+        for (int i = 1; i < ctx.fator().size(); i++) {
+            String t = inferirTipoFator(ctx.fator(i));
+            if ("real".equals(tipo) || "real".equals(t)) return "real";
+        }
+        return tipo;
+    }
+
+    private String inferirTipoFator(LAParser.FatorContext ctx) {
+        String tipo = inferirTipoParcela(ctx.parcela(0));
+        for (int i = 1; i < ctx.parcela().size(); i++) {
+            String t = inferirTipoParcela(ctx.parcela(i));
+            if ("real".equals(tipo) || "real".equals(t)) return "real";
+        }
+        return tipo;
+    }
+
+    private String inferirTipoParcela(LAParser.ParcelaContext ctx) {
+        if (ctx.parcela_unario() != null) return inferirTipoParcelaUnario(ctx.parcela_unario());
+        return inferirTipoParcelaNaoUnario(ctx.parcela_nao_unario());
+    }
+
+    private String inferirTipoParcelaUnario(LAParser.Parcela_unarioContext ctx) {
+        if (ctx.NUM_REAL() != null) return "real";
+        if (ctx.NUM_INT() != null) return "inteiro";
+        if (ctx.identificador() != null) return obterTipoExpressao(ctx.identificador().getText());
+        if (!ctx.expressao().isEmpty()) return inferirTipoExpressao(ctx.expressao(0));
+        return "inteiro";
+    }
+
+    private String inferirTipoParcelaNaoUnario(LAParser.Parcela_nao_unarioContext ctx) {
+        if (ctx.CADEIA() != null) return "literal";
+        if (ctx.identificador() != null) return obterTipoExpressao(ctx.identificador().getText());
+        return "inteiro";
+    }
+
     /**
-     * Traduz uma expressÃ£o LA para texto C.
-     * Cuida dos operadores lÃ³gicos/relacionais e de ponteiros.
-     * â€” Pessoa 2
+     * Resolve o tipo LA de um identificador a partir do texto.
+     * Tenta caminho completo ({@code reg.idade}) antes do identificador raiz.
      */
+    private String obterTipoExpressao(String exprTexto) {
+        String limpo = exprTexto.replaceAll("\\[.*", "");
+        if (tabelaTipos.containsKey(limpo)) return tabelaTipos.get(limpo);
+        String raiz = limpo.split("\\.")[0];
+        return tabelaTipos.getOrDefault(raiz, "inteiro");
+    }
+
+    /** Verifica se o destino e do tipo literal (atribuicao requer strcpy). */
+    private boolean isDestinoLiteral(String lhs) {
+        return "literal".equals(tabelaTipos.get(lhs));
+    }
+
+    private String converterTipoParaC(String tipoLA) {
+        switch (tipoLA) {
+            case "inteiro": return "int";
+            case "real":    return "float";
+            case "literal": return "char";
+            case "logico":  return "int";
+            default:        return tipoLA;
+        }
+    }
+
+    /**
+     * Gera as declaracoes dos campos internos de um registro.
+     *
+     * @param reg       contexto do registro na gramatica
+     * @param prefixVar prefixo da variavel (ex: {@code reg}) ou {@code null} ao definir um tipo
+     * @param nomeTipo  nome do tipo customizado sendo definido, ou {@code null}
+     */
+    private void gerarCamposRegistro(LAParser.RegistroContext reg, String prefixVar, String nomeTipo) {
+        Map<String, String> camposTipo = nomeTipo != null ? new HashMap<>() : null;
+
+        for (LAParser.VariavelContext vCtx : reg.variavel()) {
+            String tipoTexto = vCtx.tipo().getText();
+            String tipoBase  = tipoTexto.replace("^", "");
+            boolean isPonteiro = tipoTexto.startsWith("^");
+            String tipoC = converterTipoParaC(tipoBase);
+
+            for (LAParser.IdentificadorContext idCtx : vCtx.identificador()) {
+                String nomeCampo = idCtx.IDENT(0).getText();
+
+                if (prefixVar != null) {
+                    registrarTipo(prefixVar + "." + nomeCampo, tipoBase);
+                }
+                if (camposTipo != null) {
+                    camposTipo.put(nomeCampo, tipoBase);
+                }
+
+                if (tipoBase.equals("literal")) {
+                    saida.append(ind()).append("char ").append(nomeCampo).append("[80];\n");
+                } else if (isPonteiro) {
+                    saida.append(ind()).append(tipoC).append(" *").append(nomeCampo).append(";\n");
+                } else {
+                    saida.append(ind()).append(tipoC).append(" ").append(nomeCampo).append(";\n");
+                }
+            }
+        }
+
+        if (nomeTipo != null && camposTipo != null) {
+            definicaoTipos.put(nomeTipo, camposTipo);
+        }
+    }
+
+    /** Monta a lista de parametros formais de uma sub-rotina. */
+    private String gerarAssinaturaParametros(LAParser.ParametrosContext ctx) {
+        if (ctx == null) return "";
+        List<String> params = new ArrayList<>();
+        for (LAParser.ParametroContext pCtx : ctx.parametro()) {
+            String tipoTexto = pCtx.tipo_estendido().getText();
+            String tipoBase  = tipoTexto.replace("^", "");
+            boolean isPonteiro = tipoTexto.startsWith("^");
+            String tipoC = converterTipoParaC(tipoBase);
+
+            for (LAParser.IdentificadorContext idCtx : pCtx.identificador()) {
+                String nomeParam = idCtx.IDENT(0).getText();
+                registrarTipo(nomeParam, tipoBase);
+
+                if (tipoBase.equals("literal")) {
+                    params.add("char *" + nomeParam);
+                } else if (isPonteiro) {
+                    params.add(tipoC + " *" + nomeParam);
+                } else if (!tipoC.isEmpty()) {
+                    params.add(tipoC + " " + nomeParam);
+                } else {
+                    params.add(tipoBase + " " + nomeParam);
+                }
+            }
+        }
+        return String.join(", ", params);
+    }
+
     private String traduzirExpressao(LAParser.ExpressaoContext ctx) {
         if (ctx == null) return "";
 
         StringBuilder expr = new StringBuilder();
-
         for (int i = 0; i < ctx.termo_logico().size(); i++) {
-            if (i > 0) expr.append(" || "); // ou â†’ ||
+            if (i > 0) expr.append(" || ");
             expr.append(traduzirTermoLogico(ctx.termo_logico(i)));
         }
         return expr.toString();
@@ -60,7 +264,7 @@ public class LAGeradorC extends LAParserBaseVisitor<Void> {
     private String traduzirTermoLogico(LAParser.Termo_logicoContext ctx) {
         StringBuilder expr = new StringBuilder();
         for (int i = 0; i < ctx.fator_logico().size(); i++) {
-            if (i > 0) expr.append(" && "); // e â†’ &&
+            if (i > 0) expr.append(" && ");
             expr.append(traduzirFatorLogico(ctx.fator_logico(i)));
         }
         return expr.toString();
@@ -68,9 +272,7 @@ public class LAGeradorC extends LAParserBaseVisitor<Void> {
 
     private String traduzirFatorLogico(LAParser.Fator_logicoContext ctx) {
         String parcela = traduzirParcelaLogica(ctx.parcela_logica());
-        if (ctx.PALAVRA_CHAVE_NAO() != null) {
-            return "!" + parcela; // nao â†’ !
-        }
+        if (ctx.PALAVRA_CHAVE_NAO() != null) return "!" + parcela;
         return parcela;
     }
 
@@ -90,20 +292,11 @@ public class LAGeradorC extends LAParserBaseVisitor<Void> {
         return ea1;
     }
 
-    /**
-     * Traduz operadores relacionais LA â†’ C.
-     * = â†’ ==   <> â†’ !=   >= â†’ >=   <= â†’ <=   > â†’ >   < â†’ <
-     * â€” Pessoa 2
-     */
     private String traduzirOpRelacional(LAParser.Op_relacionalContext ctx) {
         String texto = ctx.getText();
         switch (texto) {
             case "=":  return "==";
             case "<>": return "!=";
-            case ">=": return ">=";
-            case "<=": return "<=";
-            case ">":  return ">";
-            case "<":  return "<";
             default:   return texto;
         }
     }
@@ -146,17 +339,11 @@ public class LAGeradorC extends LAParserBaseVisitor<Void> {
         return prefixo + traduzirParcelaNaoUnario(ctx.parcela_nao_unario());
     }
 
-    /**
-     * Traduz parcela unÃ¡ria â€” inclui desreferenciaÃ§Ã£o de ponteiro.
-     * ^variavel â†’ *variavel (em C)
-     * â€” Pessoa 2
-     */
     private String traduzirParcelaUnario(LAParser.Parcela_unarioContext ctx) {
         if (ctx.NUM_INT() != null)  return ctx.NUM_INT().getText();
         if (ctx.NUM_REAL() != null) return ctx.NUM_REAL().getText();
 
         if (ctx.IDENT() != null && !ctx.expressao().isEmpty()) {
-            // Chamada de funÃ§Ã£o: nome(args)
             StringBuilder sb = new StringBuilder(ctx.IDENT().getText()).append("(");
             for (int i = 0; i < ctx.expressao().size(); i++) {
                 if (i > 0) sb.append(", ");
@@ -167,8 +354,6 @@ public class LAGeradorC extends LAParserBaseVisitor<Void> {
         }
 
         if (ctx.identificador() != null) {
-            // ^var â†’ *var  (desreferenciaÃ§Ã£o de ponteiro)
-            // â€” Pessoa 2
             String prefixo = (ctx.CIRCUNFLEXO() != null) ? "*" : "";
             return prefixo + traduzirIdentificador(ctx.identificador());
         }
@@ -180,28 +365,20 @@ public class LAGeradorC extends LAParserBaseVisitor<Void> {
         return ctx.getText();
     }
 
-    /**
-     * Traduz parcela nÃ£o-unÃ¡ria â€” inclui operador de endereÃ§o.
-     * &variavel â†’ &variavel (mantido em C)
-     * â€” Pessoa 2
-     */
     private String traduzirParcelaNaoUnario(LAParser.Parcela_nao_unarioContext ctx) {
         if (ctx.CADEIA() != null) return ctx.CADEIA().getText();
         if (ctx.identificador() != null) {
-            // & jÃ¡ Ã© o operador de endereÃ§o em C, mantÃ©m como estÃ¡
             return "&" + traduzirIdentificador(ctx.identificador());
         }
         return ctx.getText();
     }
 
-    /** Traduz identificador (incluindo acesso a campos: registro.campo). */
     private String traduzirIdentificador(LAParser.IdentificadorContext ctx) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < ctx.IDENT().size(); i++) {
             if (i > 0) sb.append(".");
             sb.append(ctx.IDENT(i).getText());
         }
-        // DimensÃµes de vetor [exp]
         LAParser.DimensaoContext dim = ctx.dimensao();
         if (dim != null) {
             for (LAParser.Exp_aritmeticaContext ea : dim.exp_aritmetica()) {
@@ -212,25 +389,25 @@ public class LAGeradorC extends LAParserBaseVisitor<Void> {
     }
 
     // =========================================================
-    // PESSOA 1 â€” Estrutura principal, declaraÃ§Ãµes, leia/escreva
+    // PESSOA 1 — Estrutura principal, declaracoes, leia/escreva
     // =========================================================
 
     /**
-     * Ponto de entrada. Gera o esqueleto C com includes e main().
+     * Ponto de entrada. Gera includes, declaracoes globais e {@code int main()}.
      */
     @Override
     public Void visitPrograma(LAParser.ProgramaContext ctx) {
         saida.append("#include <stdio.h>\n");
         saida.append("#include <stdlib.h>\n\n");
 
-        // Visita declaraÃ§Ãµes globais (subrotinas ficam antes do main)
+        indent = 0;
         for (LAParser.Decl_local_globalContext dlg : ctx.declaracoes().decl_local_global()) {
             visit(dlg);
         }
 
         saida.append("int main() {\n");
+        indent = 1;
 
-        // Corpo: declaraÃ§Ãµes locais e comandos
         for (LAParser.Declaracao_localContext dl : ctx.corpo().declaracao_local()) {
             visit(dl);
         }
@@ -240,67 +417,87 @@ public class LAGeradorC extends LAParserBaseVisitor<Void> {
 
         saida.append("    return 0;\n");
         saida.append("}\n");
+
+        if (precisaStringH) {
+            int pos = saida.indexOf("#include <stdlib.h>\n");
+            if (pos >= 0) {
+                saida.insert(pos + "#include <stdlib.h>\n".length(), "#include <string.h>\n");
+            }
+        }
+
         return null;
     }
 
     /**
-     * Traduz declaraÃ§Ãµes locais de variÃ¡veis.
-     * inteiro â†’ int | real â†’ float | literal â†’ char[80]
+     * Traduz declaracoes locais de variaveis, constantes e tipos customizados.
      */
     @Override
     public Void visitDeclaracao_local(LAParser.Declaracao_localContext ctx) {
         if (ctx.variavel() != null) {
-            String tipoTexto = ctx.variavel().tipo().getText();
-            String tipoBase  = tipoTexto.replace("^", "");
-            boolean isPonteiro = tipoTexto.startsWith("^");
+            LAParser.TipoContext tipoCtx = ctx.variavel().tipo();
 
-            String tipoC = converterTipoParaC(tipoBase);
-
-            for (LAParser.IdentificadorContext idCtx : ctx.variavel().identificador()) {
-                String nomeVar = traduzirIdentificador(idCtx);
-                String nomePrincipal = idCtx.IDENT(0).getText();
-                tabelaTipos.put(nomePrincipal, tipoBase);
-
-                if (tipoBase.equals("literal")) {
-                    saida.append(ind()).append("char ").append(nomeVar).append("[80];\n");
-                } else if (isPonteiro) {
-                    saida.append(ind()).append(tipoC).append(" *").append(nomeVar).append(";\n");
-                } else if (!tipoC.isEmpty()) {
-                    saida.append(ind()).append(tipoC).append(" ").append(nomeVar).append(";\n");
+            if (tipoCtx.registro() != null) {
+                for (LAParser.IdentificadorContext idCtx : ctx.variavel().identificador()) {
+                    String nomeVar = idCtx.IDENT(0).getText();
+                    registrarTipo(nomeVar, "registro");
+                    saida.append(ind()).append("struct {\n");
+                    indent++;
+                    gerarCamposRegistro(tipoCtx.registro(), nomeVar, null);
+                    indent--;
+                    saida.append(ind()).append("} ").append(nomeVar).append(";\n");
                 }
+            } else {
+                String tipoTexto = tipoCtx.getText();
+                String tipoBase  = tipoTexto.replace("^", "");
+                boolean isPonteiro = tipoTexto.startsWith("^");
+                String tipoC = converterTipoParaC(tipoBase);
+                boolean isTipoCustomizado = !tipoBase.equals("inteiro") && !tipoBase.equals("real")
+                        && !tipoBase.equals("literal") && !tipoBase.equals("logico");
+
+                for (LAParser.IdentificadorContext idCtx : ctx.variavel().identificador()) {
+                    String nomeVar = traduzirIdentificador(idCtx);
+                    String nomePrincipal = idCtx.IDENT(0).getText();
+                    registrarTipo(nomePrincipal, tipoBase);
+
+                    if (isTipoCustomizado) {
+                        copiarCamposDoTipo(nomePrincipal, tipoBase);
+                        saida.append(ind()).append(tipoBase).append(" ").append(nomeVar).append(";\n");
+                    } else if (tipoBase.equals("literal")) {
+                        saida.append(ind()).append("char ").append(nomeVar).append("[80];\n");
+                    } else if (isPonteiro) {
+                        saida.append(ind()).append(tipoC).append(" *").append(nomeVar).append(";\n");
+                    } else if (!tipoC.isEmpty()) {
+                        saida.append(ind()).append(tipoC).append(" ").append(nomeVar).append(";\n");
+                    }
+                }
+            }
+        } else if (ctx.getChildCount() > 0 && ctx.getChild(0).getText().equals("constante")) {
+            String nome = ctx.IDENT().getText();
+            String valor = ctx.valor_constante().getText();
+            registrarTipo(nome, ctx.tipo_basico().getText());
+            saida.append("#define ").append(nome).append(" ").append(valor).append("\n");
+        } else if (ctx.getChildCount() > 0 && ctx.getChild(0).getText().equals("tipo")) {
+            String nomeTipo = ctx.IDENT().getText();
+            LAParser.TipoContext tipoCtx = ctx.tipo();
+
+            if (tipoCtx.registro() != null && !tiposDefinidos.contains(nomeTipo)) {
+                tiposDefinidos.add(nomeTipo);
+                saida.append("typedef struct {\n");
+                indent++;
+                gerarCamposRegistro(tipoCtx.registro(), null, nomeTipo);
+                indent--;
+                saida.append("} ").append(nomeTipo).append(";\n");
             }
         }
         return null;
     }
 
-    private String converterTipoParaC(String tipoLA) {
-        switch (tipoLA) {
-            case "inteiro": return "int";
-            case "real":    return "float";
-            case "literal": return "char";
-            case "logico":  return "int";
-            default:        return tipoLA; // tipos customizados (registros/typedef)
-        }
-    }
-
-    /**
-     * Gera scanf / gets para o comando leia.
-     */
     @Override
     public Void visitCmdLeia(LAParser.CmdLeiaContext ctx) {
-        for (int i = 0; i < ctx.identificador().size(); i++) {
-            LAParser.IdentificadorContext idCtx = ctx.identificador(i);
+        for (LAParser.IdentificadorContext idCtx : ctx.identificador()) {
             String nomeVar = traduzirIdentificador(idCtx);
             String nomePrincipal = idCtx.IDENT(0).getText();
             String tipo = tabelaTipos.getOrDefault(nomePrincipal, "inteiro");
-
-            // Se o leia vier com ^ (ponteiro), ctx tem CIRCUNFLEXO tokens por Ã­ndice
-            boolean temCircunflexo = false;
-            // Verificamos no texto original do contexto antes do identificador
-            if (ctx.CIRCUNFLEXO() != null && !ctx.CIRCUNFLEXO().isEmpty()) {
-                // hÃ¡ pelo menos um ^; assume ponteiro
-                temCircunflexo = true;
-            }
 
             if (tipo.equals("literal")) {
                 saida.append(ind()).append("gets(").append(nomeVar).append(");\n");
@@ -313,10 +510,6 @@ public class LAGeradorC extends LAParserBaseVisitor<Void> {
         return null;
     }
 
-    /**
-     * Gera printf para o comando escreva.
-     * Strings literais diretas sÃ£o impressas sem formatador extra.
-     */
     @Override
     public Void visitCmdEscreva(LAParser.CmdEscrevaContext ctx) {
         for (LAParser.ExpressaoContext expCtx : ctx.expressao()) {
@@ -324,19 +517,13 @@ public class LAGeradorC extends LAParserBaseVisitor<Void> {
             String expTexto = expCtx.getText();
 
             if (expTexto.startsWith("\"")) {
-                // String literal: printf("texto");
                 saida.append(ind()).append("printf(").append(expC).append(");\n");
             } else {
-                // VariÃ¡vel ou expressÃ£o: descobre o formatador pelo tipo
-                String nomePrincipal = expTexto.replaceAll("\\[.*", "").split("\\.")[0];
-                String tipo = tabelaTipos.getOrDefault(nomePrincipal, "");
-
+                String tipo = inferirTipoExpressao(expCtx);
                 if (tipo.equals("real")) {
                     saida.append(ind()).append("printf(\"%f\", ").append(expC).append(");\n");
                 } else if (tipo.equals("literal")) {
                     saida.append(ind()).append("printf(\"%s\", ").append(expC).append(");\n");
-                } else if (tipo.equals("logico")) {
-                    saida.append(ind()).append("printf(\"%d\", ").append(expC).append(");\n");
                 } else {
                     saida.append(ind()).append("printf(\"%d\", ").append(expC).append(");\n");
                 }
@@ -346,24 +533,51 @@ public class LAGeradorC extends LAParserBaseVisitor<Void> {
     }
 
     // =========================================================
-    // PESSOA 2 â€” Estruturas de controle, operadores, ponteiros
+    // PESSOA 3 — Sub-rotinas (funcao / procedimento)
     // =========================================================
 
     /**
-     * se expressao entao ... senao ... fim_se
-     * â†’  if (...) { ... } else { ... }
+     * Traduz declaracoes globais de funcao e procedimento.
+     * O codigo gerado e emitido antes de {@code int main()}, conforme exigido pelo T5.
      */
+    @Override
+    public Void visitDeclaracao_global(LAParser.Declaracao_globalContext ctx) {
+        boolean isFuncao = ctx.getChild(0).getText().equals("funcao");
+        String nome = ctx.IDENT().getText();
+
+        Map<String, String> tiposSalvos = new HashMap<>(tabelaTipos);
+        tabelaTipos.clear();
+        String params = gerarAssinaturaParametros(ctx.parametros());
+
+        if (isFuncao) {
+            String tipoRetTexto = ctx.tipo_estendido().getText().replace("^", "");
+            String tipoRetC = converterTipoParaC(tipoRetTexto);
+            if (tipoRetC.isEmpty()) tipoRetC = tipoRetTexto;
+            saida.append(tipoRetC).append(" ").append(nome).append("(").append(params).append(") {\n");
+        } else {
+            saida.append("void ").append(nome).append("(").append(params).append(") {\n");
+        }
+
+        indent = 1;
+        for (LAParser.Declaracao_localContext dl : ctx.declaracao_local()) visit(dl);
+        for (LAParser.CmdContext cmd : ctx.cmd()) visit(cmd);
+
+        saida.append("}\n\n");
+        indent = 0;
+        tabelaTipos = tiposSalvos;
+        return null;
+    }
+
+    // =========================================================
+    // PESSOA 2 — Estruturas de controle, operadores, ponteiros
+    // =========================================================
+
     @Override
     public Void visitCmdSe(LAParser.CmdSeContext ctx) {
         String condicao = traduzirExpressao(ctx.expressao());
         saida.append(ind()).append("if (").append(condicao).append(") {\n");
 
         indent++;
-        // Comandos do "entao"
-        // Os comandos do bloco se/senao sÃ£o intercalados; precisamos separar pelo
-        // Ã­ndice. A gramÃ¡tica coloca todos os cmd* numa lista Ãºnica, com SENAO como
-        // separador implÃ­cito. O ANTLR 4 nÃ£o cria sub-listas, mas podemos usar a
-        // posiÃ§Ã£o do token SENAO para dividir.
         int posicaoSenao = -1;
         for (int i = 0; i < ctx.getChildCount(); i++) {
             if (ctx.getChild(i).getText().equals("senao")) {
@@ -372,12 +586,9 @@ public class LAGeradorC extends LAParserBaseVisitor<Void> {
             }
         }
 
-        // Visita comandos antes do senao
         for (LAParser.CmdContext cmdCtx : ctx.cmd()) {
             int posCmd = ctx.children.indexOf(cmdCtx);
-            if (posicaoSenao == -1 || posCmd < posicaoSenao) {
-                visit(cmdCtx);
-            }
+            if (posicaoSenao == -1 || posCmd < posicaoSenao) visit(cmdCtx);
         }
         indent--;
 
@@ -386,9 +597,7 @@ public class LAGeradorC extends LAParserBaseVisitor<Void> {
             indent++;
             for (LAParser.CmdContext cmdCtx : ctx.cmd()) {
                 int posCmd = ctx.children.indexOf(cmdCtx);
-                if (posCmd > posicaoSenao) {
-                    visit(cmdCtx);
-                }
+                if (posCmd > posicaoSenao) visit(cmdCtx);
             }
             indent--;
         }
@@ -397,69 +606,45 @@ public class LAGeradorC extends LAParserBaseVisitor<Void> {
         return null;
     }
 
-    /**
-     * enquanto expressao faca ... fim_enquanto
-     * â†’ while (...) { ... }
-     */
     @Override
     public Void visitCmdEnquanto(LAParser.CmdEnquantoContext ctx) {
         String condicao = traduzirExpressao(ctx.expressao());
         saida.append(ind()).append("while (").append(condicao).append(") {\n");
         indent++;
-        for (LAParser.CmdContext cmdCtx : ctx.cmd()) {
-            visit(cmdCtx);
-        }
+        for (LAParser.CmdContext cmdCtx : ctx.cmd()) visit(cmdCtx);
         indent--;
         saida.append(ind()).append("}\n");
         return null;
     }
 
-    /**
-     * para IDENT <- inicio ate fim faca ... fim_para
-     * â†’ for (IDENT = inicio; IDENT <= fim; IDENT++) { ... }
-     */
     @Override
     public Void visitCmdPara(LAParser.CmdParaContext ctx) {
-        String var   = ctx.IDENT().getText();
+        String var = ctx.IDENT().getText();
         String inicio = traduzirExpAritmetica(ctx.exp_aritmetica(0));
-        String fim    = traduzirExpAritmetica(ctx.exp_aritmetica(1));
+        String fim = traduzirExpAritmetica(ctx.exp_aritmetica(1));
 
         saida.append(ind())
-             .append("for (")
-             .append(var).append(" = ").append(inicio).append("; ")
+             .append("for (").append(var).append(" = ").append(inicio).append("; ")
              .append(var).append(" <= ").append(fim).append("; ")
-             .append(var).append("++")
-             .append(") {\n");
+             .append(var).append("++) {\n");
         indent++;
-        for (LAParser.CmdContext cmdCtx : ctx.cmd()) {
-            visit(cmdCtx);
-        }
+        for (LAParser.CmdContext cmdCtx : ctx.cmd()) visit(cmdCtx);
         indent--;
         saida.append(ind()).append("}\n");
         return null;
     }
 
-    /**
-     * faca ... ate expressao
-     * â†’ do { ... } while (...);
-     */
     @Override
     public Void visitCmdFaca(LAParser.CmdFacaContext ctx) {
         saida.append(ind()).append("do {\n");
         indent++;
-        for (LAParser.CmdContext cmdCtx : ctx.cmd()) {
-            visit(cmdCtx);
-        }
+        for (LAParser.CmdContext cmdCtx : ctx.cmd()) visit(cmdCtx);
         indent--;
         String condicao = traduzirExpressao(ctx.expressao());
         saida.append(ind()).append("} while (").append(condicao).append(");\n");
         return null;
     }
 
-    /**
-     * caso exp_aritmetica seja ... senao ... fim_caso
-     * â†’ switch (...) { case ...: ... break; default: ... }
-     */
     @Override
     public Void visitCmdCaso(LAParser.CmdCasoContext ctx) {
         String expr = traduzirExpAritmetica(ctx.exp_aritmetica());
@@ -467,13 +652,9 @@ public class LAGeradorC extends LAParserBaseVisitor<Void> {
         indent++;
         visit(ctx.selecao());
 
-        // Bloco senao â†’ default
-        // Os cmd do senao ficam nos filhos apÃ³s o token "senao"
-        boolean dentroSenao = false;
         boolean temSenao = false;
         for (int i = 0; i < ctx.getChildCount(); i++) {
             if (ctx.getChild(i).getText().equals("senao")) {
-                dentroSenao = true;
                 temSenao = true;
                 break;
             }
@@ -482,10 +663,7 @@ public class LAGeradorC extends LAParserBaseVisitor<Void> {
         if (temSenao) {
             saida.append(ind()).append("default:\n");
             indent++;
-            for (LAParser.CmdContext cmdCtx : ctx.cmd()) {
-                visit(cmdCtx);
-            }
-            saida.append(ind()).append("break;\n");
+            for (LAParser.CmdContext cmdCtx : ctx.cmd()) visit(cmdCtx);
             indent--;
         }
 
@@ -496,24 +674,20 @@ public class LAGeradorC extends LAParserBaseVisitor<Void> {
 
     @Override
     public Void visitSelecao(LAParser.SelecaoContext ctx) {
-        for (LAParser.Item_selecaoContext item : ctx.item_selecao()) {
-            visit(item);
-        }
+        for (LAParser.Item_selecaoContext item : ctx.item_selecao()) visit(item);
         return null;
     }
 
     @Override
     public Void visitItem_selecao(LAParser.Item_selecaoContext ctx) {
-        // Cada item pode ter vÃ¡rios intervalos/valores (1, 3..5, 7)
         for (LAParser.Numero_intervaloContext ni : ctx.constantes().numero_intervalo()) {
             String texto = ni.getText();
             if (texto.contains("..")) {
-                // Intervalo: 3..7 â†’ cases 3,4,5,6,7
                 String[] partes = texto.split("\\.\\.");
                 int inicio = Integer.parseInt(partes[0].replace("-", "").trim());
-                int fim    = Integer.parseInt(partes[1].replace("-", "").trim());
+                int fim = Integer.parseInt(partes[1].replace("-", "").trim());
                 boolean negInicio = partes[0].contains("-");
-                boolean negFim    = partes[1].contains("-");
+                boolean negFim = partes[1].contains("-");
                 for (int v = (negInicio ? -inicio : inicio); v <= (negFim ? -fim : fim); v++) {
                     saida.append(ind()).append("case ").append(v).append(":\n");
                 }
@@ -522,31 +696,31 @@ public class LAGeradorC extends LAParserBaseVisitor<Void> {
             }
         }
         indent++;
-        for (LAParser.CmdContext cmdCtx : ctx.cmd()) {
-            visit(cmdCtx);
-        }
+        for (LAParser.CmdContext cmdCtx : ctx.cmd()) visit(cmdCtx);
         saida.append(ind()).append("break;\n");
         indent--;
         return null;
     }
 
     /**
-     * AtribuiÃ§Ã£o: identificador <- expressao
-     * Com suporte a ponteiros: ^identificador <- expressao â†’ *ident = expr;
-     * â€” Pessoa 2
+     * Atribuicao: identificador {@code <-} expressao.
+     * Campos literal recebem {@code strcpy} em vez de {@code =}.
      */
     @Override
     public Void visitCmdAtribuicao(LAParser.CmdAtribuicaoContext ctx) {
         String prefixo = (ctx.CIRCUNFLEXO() != null) ? "*" : "";
         String lhs = prefixo + traduzirIdentificador(ctx.identificador());
         String rhs = traduzirExpressao(ctx.expressao());
-        saida.append(ind()).append(lhs).append(" = ").append(rhs).append(";\n");
+
+        if (prefixo.isEmpty() && rhs.startsWith("\"") && isDestinoLiteral(lhs)) {
+            precisaStringH = true;
+            saida.append(ind()).append("strcpy(").append(lhs).append(", ").append(rhs).append(");\n");
+        } else {
+            saida.append(ind()).append(lhs).append(" = ").append(rhs).append(";\n");
+        }
         return null;
     }
 
-    /**
-     * Chamada de procedimento: nome(args)
-     */
     @Override
     public Void visitCmdChamada(LAParser.CmdChamadaContext ctx) {
         StringBuilder sb = new StringBuilder(ind())
@@ -560,9 +734,7 @@ public class LAGeradorC extends LAParserBaseVisitor<Void> {
         return null;
     }
 
-    /**
-     * retorne expressao â†’ return expressao;
-     */
+    /** retorne expressao → return expressao; */
     @Override
     public Void visitCmdRetorne(LAParser.CmdRetorneContext ctx) {
         saida.append(ind()).append("return ")
@@ -570,4 +742,3 @@ public class LAGeradorC extends LAParserBaseVisitor<Void> {
         return null;
     }
 }
-

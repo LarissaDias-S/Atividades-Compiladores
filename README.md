@@ -105,12 +105,6 @@ Após compilar o projeto com `mvn clean package`, execute o script de testes que
 rodar_testes_t5.bat
 ```
 
-**Linux / macOS:**
-```bash
-chmod +x rodar_testes_t5.sh
-./rodar_testes_t5.sh
-```
-
 O script executa, para cada caso de teste:
 1. Compila o arquivo `.alg` com o compilador LA → gera `.c`
 2. Compila o `.c` gerado com **GCC**

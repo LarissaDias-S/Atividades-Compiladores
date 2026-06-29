@@ -1,0 +1,16 @@
+# Teste inválido 06 — Palavra-chave em caixa errada (dataset em vez de DATASET)
+# A linguagem é case-sensitive; 'dataset' não é token reconhecido.
+# Erro esperado: erro sintático próximo a 'dataset'
+
+dataset "dados.csv"
+  COLUMNS col1, col2, alvo
+END
+
+TARGET_VAR alvo
+FEATURES col1, col2
+
+MODEL m1 RandomForest
+END
+
+METRICS accuracy
+OUTPUT "saida.pkl"

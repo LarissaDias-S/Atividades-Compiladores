@@ -1,0 +1,15 @@
+# Teste inválido 04 — Métrica inválida (não pertence à lista fechada)
+# Erro esperado: erro sintático próximo a 'auc_roc'
+
+DATASET "dados.csv"
+  COLUMNS col1, col2, alvo
+END
+
+TARGET_VAR alvo
+FEATURES col1, col2
+
+MODEL m1 RandomForest
+END
+
+METRICS accuracy, auc_roc
+OUTPUT "saida.pkl"

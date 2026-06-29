@@ -1,0 +1,16 @@
+# Teste inválido 03 — Algoritmo inválido (não pertence à lista fechada)
+# Erro esperado: erro sintático próximo a 'DecisionTree'
+
+DATASET "dados.csv"
+  COLUMNS col1, col2, alvo
+END
+
+TARGET_VAR alvo
+FEATURES col1, col2
+
+MODEL m1 DecisionTree
+  max_depth = 5
+END
+
+METRICS accuracy
+OUTPUT "saida.pkl"

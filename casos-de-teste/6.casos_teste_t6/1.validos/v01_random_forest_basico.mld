@@ -1,0 +1,18 @@
+# Teste válido 01 — Classificação com RandomForest
+# Caso simples e completo: dataset, target, features, modelo, métricas, output.
+
+DATASET "dados/clientes.csv"
+  COLUMNS idade, salario, regiao, comprou
+END
+
+TARGET_VAR comprou
+FEATURES idade, salario, regiao
+
+MODEL classificador RandomForest
+  n_estimators = 100
+  max_depth    = 10
+  random_state = 42
+END
+
+METRICS accuracy, f1_score
+OUTPUT "modelos/rf_clientes.pkl"

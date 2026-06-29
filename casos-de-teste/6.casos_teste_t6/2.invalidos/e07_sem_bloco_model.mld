@@ -1,0 +1,12 @@
+# Teste inválido 07 — Bloco MODEL ausente
+# Erro esperado: erro sintático próximo a 'METRICS' (esperava MODEL)
+
+DATASET "dados.csv"
+  COLUMNS col1, col2, alvo
+END
+
+TARGET_VAR alvo
+FEATURES col1, col2
+
+METRICS accuracy
+OUTPUT "saida.pkl"

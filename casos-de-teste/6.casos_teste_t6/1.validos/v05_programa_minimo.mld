@@ -1,0 +1,15 @@
+# Teste válido 05 — Programa mínimo (sem hiperparâmetros)
+# Verifica que hiperparâmetros são opcionais no bloco MODEL.
+
+DATASET "iris.csv"
+  COLUMNS sepal_length, sepal_width, petal_length, petal_width, species
+END
+
+TARGET_VAR species
+FEATURES sepal_length, sepal_width, petal_length, petal_width
+
+MODEL modelo_iris RandomForest
+END
+
+METRICS accuracy
+OUTPUT "modelos/iris_rf.pkl"

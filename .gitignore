@@ -13,3 +13,12 @@ target/
 # Ignora arquivos compilados soltos
 *.class
 *.jar
+# T6 — ML-Declara (Python + ANTLR4)
+# Bytecode Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Modelos treinados gerados nos testes de codegen
+*.pkl
+*.joblib

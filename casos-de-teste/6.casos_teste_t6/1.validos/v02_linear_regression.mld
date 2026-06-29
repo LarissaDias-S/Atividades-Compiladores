@@ -1,0 +1,15 @@
+# Teste válido 02 — Regressão com LinearRegression
+# Verifica suporte a métricas de regressão (RMSE, MAE, R2).
+
+DATASET "dados/imoveis.csv"
+  COLUMNS area, quartos, banheiros, garagem, preco
+END
+
+TARGET_VAR preco
+FEATURES area, quartos, banheiros, garagem
+
+MODEL regressao_linear LinearRegression
+END
+
+METRICS RMSE, MAE, R2
+OUTPUT "modelos/lr_imoveis.pkl"

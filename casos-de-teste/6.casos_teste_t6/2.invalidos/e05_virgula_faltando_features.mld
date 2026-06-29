@@ -1,0 +1,15 @@
+# Teste inválido 05 — Vírgula faltando na lista FEATURES
+# Erro esperado: erro sintático próximo a 'col2'
+
+DATASET "dados.csv"
+  COLUMNS col1, col2, col3, alvo
+END
+
+TARGET_VAR alvo
+FEATURES col1 col2 col3
+
+MODEL m1 LinearRegression
+END
+
+METRICS RMSE
+OUTPUT "saida.pkl"

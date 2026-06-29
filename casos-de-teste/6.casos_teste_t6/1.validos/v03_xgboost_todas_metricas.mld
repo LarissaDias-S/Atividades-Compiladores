@@ -1,0 +1,21 @@
+# Teste válido 03 — Classificação com XGBoost e todas as métricas de classificação
+# Verifica múltiplos hiperparâmetros float e todas as métricas do tipo classificação.
+
+DATASET "dados/fraude.csv"
+  COLUMNS valor, hora, tipo_transacao, pais, fraude
+END
+
+// Features sem a variável alvo
+FEATURES valor, hora, tipo_transacao, pais
+
+TARGET_VAR fraude   // TARGET_VAR pode vir depois de FEATURES
+
+MODEL detector_fraude XGBoost
+  n_estimators  = 200
+  max_depth     = 6
+  learning_rate = 0.1
+  random_state  = 0
+END
+
+METRICS accuracy, f1_score, precision, recall
+OUTPUT "modelos/xgb_fraude.pkl"

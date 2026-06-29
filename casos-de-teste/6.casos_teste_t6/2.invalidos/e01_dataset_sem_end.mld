@@ -1,0 +1,14 @@
+# Teste inválido 01 — Bloco DATASET sem END
+# Erro esperado: erro sintático próximo a 'TARGET_VAR' (esperava END)
+
+DATASET "dados.csv"
+  COLUMNS col1, col2, alvo
+
+TARGET_VAR alvo
+FEATURES col1, col2
+
+MODEL m1 RandomForest
+END
+
+METRICS accuracy
+OUTPUT "saida.pkl"

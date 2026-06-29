@@ -1,0 +1,15 @@
+# Teste inválido 02 — Cadeia literal não fechada no DATASET
+# Erro esperado: erro léxico — cadeia literal não fechada
+
+DATASET "dados/arquivo_sem_fechar.csv
+  COLUMNS col1, col2, alvo
+END
+
+TARGET_VAR alvo
+FEATURES col1, col2
+
+MODEL m RandomForest
+END
+
+METRICS accuracy
+OUTPUT "saida.pkl"
